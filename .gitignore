@@ -1,4 +1,3 @@
-```
 # Python
 __pycache__/
 *.py[cod]
@@ -22,19 +21,17 @@ wheels/
 *.egg
 
 # Testing
-.coverage
-coverage/
-htmlcov/
-.nosetests
 .pytest_cache/
+.coverage
+htmlcov/
+coverage/
 
 # Environment
+.venv/
+venv/
 .env
 .env.local
 .env.*
-.venv/
-venv/
-ENV/
 
 # IDE
 .vscode/
@@ -49,4 +46,3 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
-```
