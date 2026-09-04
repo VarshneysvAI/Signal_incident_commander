@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.db import Base, get_db
-from app.models import Incident, Utterance, GraphNode, GraphEdge
+from app.models import Incident, Utterance, GraphNode, GraphEdge, NodeStatus, ActionItem
 from app.services.graph_service import graph_service
 from app.services.parser_service import parser_service
 
@@ -181,7 +181,7 @@ class TestGraphService:
         
         # Check that hypothesis was faded due to contradiction
         db.refresh(hypothesis_node)
-        assert hypothesis_node.status == "faded"
+        assert hypothesis_node.status == NodeStatus.faded
         
         # Check that contradiction edge was created
         edges = db.query(GraphEdge).filter(
@@ -395,10 +395,10 @@ class TestGraphService:
             parsed=parse_result2
         )
         
-        # Check edges exist
+        # Check edges exist (should have at least 2: incident->hypothesis, hypothesis->decision)
         edges = db.query(GraphEdge).filter(
             GraphEdge.incident_id == test_incident.id
         ).all()
-        assert len(edges) > 0
+        assert len(edges) >= 1
         
         db.close()

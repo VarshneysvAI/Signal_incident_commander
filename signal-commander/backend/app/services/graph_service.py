@@ -136,6 +136,9 @@ class GraphService:
         # Check for contradictions with facts
         from ..services.contradiction_service import contradiction_service
         contradiction_service.check_hypothesis_contradictions(db, node)
+        
+        # Flush to ensure status changes are persisted
+        db.flush()
     
     def _create_decision_node(self, db, incident_id, incident_node, utterance, label, speaker, topic, confidence, negated):
         status = NodeStatus.rejected if negated else NodeStatus.active
