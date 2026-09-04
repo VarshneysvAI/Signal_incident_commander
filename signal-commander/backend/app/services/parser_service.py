@@ -29,8 +29,6 @@ class ParserService:
         r"my theory is",
         r"i suspect",
         r"seems like",
-        r"is (the issue|the problem|failing|broken|down)",
-        r"\w+ (is|are) (the issue|the problem|failing|broken|down)",
     ]
     
     DECISION_PATTERNS = [
@@ -43,7 +41,7 @@ class ParserService:
     
     ACTION_PATTERNS = [
         r"(i|\w+) (will|can) (handle|take|fix|do)",
-        r"assign(?:ed)?\s+(?:this\s+)?(?:to\s+)?(\w+)",
+        r"assign(ed)?( to)? \w+",
         r"(working on|looking into|investigating)",
     ]
     
@@ -76,23 +74,8 @@ class ParserService:
     
     def detect_negation(self, text: str, match_start: int, match_end: int) -> bool:
         """Check if negation word appears within 4 tokens before matched keyword."""
-        # Get words before the match (up to 4 tokens)
         words_before = text[:match_start].split()[-4:]
-        text_window = ' '.join(words_before).lower()
-        
-        # Check for negation words in the window
-        for neg in self.NEGATION_WORDS:
-            if neg in text_window:
-                return True
-        
-        # Also check if negation appears anywhere in the full text near key decision/hypothesis markers
-        # This handles cases like "should NOT" where NOT comes after the verb
-        words = text.split()
-        for i, word in enumerate(words):
-            if word.lower() in self.NEGATION_WORDS or word.lower().rstrip('.,!?') in self.NEGATION_WORDS:
-                return True
-        
-        return False
+        return any(neg in ' '.join(words_before).lower() for neg in self.NEGATION_WORDS)
     
     def detect_topic(self, text: str) -> str:
         """Detect topic from keywords. Returns first matching group or 'general'."""
@@ -137,16 +120,13 @@ class ParserService:
                 return owner, "committed"
             return owner, "pending_owner_confirmation"
         
-        # "assign(ed)? (this)? (to)? (\w+)" → captured name from pattern
-        match = re.search(r'assign(?:ed)?\s+(?:this\s+)?(?:to\s+)?(\w+)', text_lower)
+        # "assign(ed)? to (\w+)" → captured name
+        match = re.search(r'assign(?:ed)?\s+to\s+(\w+)', text_lower)
         if match:
-            owner_candidate = match.group(1).title()
-            # Skip common words that aren't names
-            if owner_candidate.lower() in ['this', 'that', 'it']:
-                return None, "unassigned"
-            if owner_candidate.lower() == speaker.lower():
-                return owner_candidate, "committed"
-            return owner_candidate, "pending_owner_confirmation"
+            owner = match.group(1).title()
+            if owner.lower() == speaker.lower():
+                return owner, "committed"
+            return owner, "pending_owner_confirmation"
         
         return None, "unassigned"
     
