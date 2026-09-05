@@ -178,6 +178,15 @@ class GraphService:
                 source_utterance_id=utterance.id
             )
             db.add(edge)
+        elif incident_node:
+            edge = GraphEdge(
+                incident_id=incident_id,
+                from_node_id=incident_node.id,
+                to_node_id=node.id,
+                type=EdgeType.led_to,
+                source_utterance_id=utterance.id
+            )
+            db.add(edge)
         
         # Log event
         db.add(EventLog(
@@ -216,18 +225,27 @@ class GraphService:
         )
         db.add(action_item)
         
-        # Find nearest decision with same topic and link
-        decision = db.query(GraphNode).filter(
+        # Find nearest decision or hypothesis with same topic, or link to incident
+        parent = db.query(GraphNode).filter(
             GraphNode.incident_id == incident_id,
-            GraphNode.type == NodeType.decision,
+            GraphNode.type.in_([NodeType.decision, NodeType.hypothesis]),
             GraphNode.topic == topic,
             GraphNode.status == NodeStatus.active
         ).first()
         
-        if decision:
+        if parent:
             edge = GraphEdge(
                 incident_id=incident_id,
-                from_node_id=decision.id,
+                from_node_id=parent.id,
+                to_node_id=node.id,
+                type=EdgeType.assigned,
+                source_utterance_id=utterance.id
+            )
+            db.add(edge)
+        elif incident_node:
+            edge = GraphEdge(
+                incident_id=incident_id,
+                from_node_id=incident_node.id,
                 to_node_id=node.id,
                 type=EdgeType.assigned,
                 source_utterance_id=utterance.id

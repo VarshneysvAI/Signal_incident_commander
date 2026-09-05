@@ -60,20 +60,57 @@ export function KnowledgeGraph() {
       };
     });
 
-    const edges = graphData.edges.map((edge: GraphEdge) => ({
-      id: edge.id,
-      from: edge.from_node_id,
-      to: edge.to_node_id,
-      label: edge.type.replace('_', ' '),
-      color: {
-        color: EDGE_COLORS[edge.type] || '#64748b',
-        highlight: '#ffffff',
-      },
-      font: { color: '#94a3b8', size: 10, align: 'middle' },
-      dashes: edge.type === 'contradicts',
-      arrows: 'to',
-      width: edge.type === 'contradicts' ? 2.5 : 1.2,
-    }));
+    const edges = graphData.edges.map((edge: GraphEdge) => {
+      const isContradiction = edge.type === 'contradicts';
+      const isDecision = edge.type === 'led_to';
+      const isAssigned = edge.type === 'assigned';
+      const isSupports = edge.type === 'supports';
+
+      let labelText = edge.type.replace('_', ' ');
+      if (isContradiction) labelText = '⚠️ CONTRADICTS';
+      else if (isDecision) labelText = 'leads to';
+      else if (isAssigned) labelText = 'assigned';
+      else if (isSupports) labelText = 'supports';
+      else if (edge.type === 'investigated') labelText = 'investigating';
+
+      const edgeColor = isContradiction
+        ? '#ef4444'
+        : isSupports
+        ? '#10b981'
+        : isDecision
+        ? '#3b82f6'
+        : isAssigned
+        ? '#f59e0b'
+        : '#475569';
+
+      return {
+        id: edge.id,
+        from: edge.from_node_id,
+        to: edge.to_node_id,
+        label: ` ${labelText} `,
+        color: {
+          color: edgeColor,
+          highlight: '#ffffff',
+          hover: '#ffffff',
+        },
+        font: {
+          color: isContradiction ? '#fca5a5' : '#f1f5f9',
+          size: 11,
+          align: 'middle',
+          background: '#0f172a',
+          strokeWidth: 2,
+          strokeColor: edgeColor,
+        },
+        dashes: isContradiction ? [6, 4] : false,
+        arrows: {
+          to: {
+            enabled: true,
+            scaleFactor: 1.1,
+          },
+        },
+        width: isContradiction ? 2.5 : 1.6,
+      };
+    });
 
     const data: any = {
       nodes: new DataSet(nodes),
