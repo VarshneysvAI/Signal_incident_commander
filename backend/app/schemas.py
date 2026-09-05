@@ -144,6 +144,17 @@ class ActionConfirmRequest(BaseModel):
     owner_name: str
 
 
+class ActionStatusUpdateRequest(BaseModel):
+    status: ActionStatus
+    owner_name: Optional[str] = None
+
+
+class ActionCreateRequest(BaseModel):
+    label: str
+    proposed_owner: Optional[str] = None
+    status: Optional[ActionStatus] = ActionStatus.unassigned
+
+
 class QueryRequest(BaseModel):
     speaker_name: Optional[str] = None
     text: str

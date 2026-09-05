@@ -15,10 +15,10 @@ interface SpeakerPreset {
 }
 
 const PRESET_SPEAKERS: SpeakerPreset[] = [
-  { name: 'Alice', uid: 1001, role: 'Incident Commander / SRE Lead', avatar: '?????' },
-  { name: 'Bob', uid: 1002, role: 'Backend / DB Engineer', avatar: '?????' },
-  { name: 'Carol', uid: 1003, role: 'Infrastructure / DevOps', avatar: '?????' },
-  { name: 'Dave', uid: 1004, role: 'Engineering Manager', avatar: '?????' },
+  { name: 'Alice', uid: 1001, role: 'Incident Commander / SRE Lead', avatar: '👩‍💼' },
+  { name: 'Bob', uid: 1002, role: 'Backend / DB Engineer', avatar: '👨‍💻' },
+  { name: 'Carol', uid: 1003, role: 'Infrastructure / DevOps', avatar: '👩‍🔧' },
+  { name: 'Dave', uid: 1004, role: 'Engineering Manager', avatar: '👨‍💼' },
 ];
 
 export const RoomPage: React.FC = () => {
@@ -235,7 +235,7 @@ export const RoomPage: React.FC = () => {
                 </h1>
                 <p className="text-sm text-slate-400">
                   Channel: <span className="text-blue-400 font-mono font-semibold">{channelName}</span>
-                  {currentIncident && <span className="ml-2 text-slate-500">� Incident: {currentIncident.title}</span>}
+                  {currentIncident && <span className="ml-2 text-slate-500">• Incident: {currentIncident.title}</span>}
                 </p>
               </div>
             </div>
@@ -530,4 +530,4 @@ export const RoomPage: React.FC = () => {
   );
 };
 
-export default RoomPage;
+export default RoomPage;

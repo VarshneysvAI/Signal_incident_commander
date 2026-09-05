@@ -20,6 +20,7 @@ export interface Utterance {
   confidence: 'high' | 'medium' | 'low' | 'uncertain';
   negated: boolean;
   topic: string;
+  polarity?: 'positive' | 'negative' | null;
   raw_parser_json: Record<string, any>;
 }
 

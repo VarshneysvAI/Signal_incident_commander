@@ -3,6 +3,8 @@ import { HeaderBar } from './components/HeaderBar';
 import { KnowledgeGraph } from './components/KnowledgeGraph';
 import { DocumentPanel } from './components/DocumentPanel';
 import { TranscriptPanel } from './components/TranscriptPanel';
+import { TimelinePanel } from './components/TimelinePanel';
+import { ContradictionBanner } from './components/ContradictionBanner';
 import { GapRadar } from './components/GapRadar';
 import { ActionsPanel } from './components/ActionsPanel';
 import { QueryBar } from './components/QueryBar';
@@ -80,6 +82,7 @@ function App() {
         </div>
       ) : (
         <>
+          <ContradictionBanner />
           <div className="flex-1 flex overflow-hidden p-4 gap-4">
             <div className="w-[45%] flex flex-col">
               <KnowledgeGraph />
@@ -121,7 +124,7 @@ function App() {
           
           <div className="flex-1 overflow-hidden">
             {activeTab === 'document' && <DocumentPanel />}
-            {activeTab === 'timeline' && <TranscriptPanel />}
+            {activeTab === 'timeline' && <TimelinePanel />}
             {activeTab === 'transcript' && <TranscriptPanel />}
           </div>
         </div>

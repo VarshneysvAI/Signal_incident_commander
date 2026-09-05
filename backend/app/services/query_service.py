@@ -271,32 +271,37 @@ Return ONLY raw JSON with:
 }"""
         
         try:
+            is_nvidia = "nvidia.com" in settings.llm_base_url or "nemotron" in settings.llm_model.lower()
+            payload: dict = {
+                "model": settings.llm_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Context: {json.dumps(doc_data)}\n\nQuestion: {text}"}
+                ],
+                "temperature": 0.1,
+                "max_tokens": 512
+            }
+            if is_nvidia:
+                payload["chat_template_kwargs"] = {"enable_thinking": False}
+
             response = httpx.post(
                 f"{settings.llm_base_url}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {settings.llm_api_key}",
                     "Content-Type": "application/json"
                 },
-                json={
-                    "model": settings.llm_model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Context: {json.dumps(doc_data)}\n\nQuestion: {text}"}
-                    ],
-                    "temperature": 0.1,
-                    "max_tokens": 300
-                },
-                timeout=8.0
+                json=payload,
+                timeout=12.0
             )
             response.raise_for_status()
             data = response.json()
             content = data["choices"][0]["message"]["content"].strip()
             
-            if content.startswith("```"):
-                lines = content.splitlines()
-                content = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+            import re
+            json_match = re.search(r'(\{.*\})', content, re.DOTALL)
+            json_str = json_match.group(1) if json_match else content
             
-            result = json.loads(content)
+            result = json.loads(json_str)
             answer = result.get("answer", "")
             node_ids = result.get("source_node_ids", [])
             

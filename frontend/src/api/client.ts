@@ -38,9 +38,13 @@ export const documentApi = {
 
 export const actionsApi = {
   getActions: (incidentId: string) => api.get(`/api/incidents/${incidentId}/actions`),
+  create: (incidentId: string, data: { label: string; proposed_owner?: string; status?: string }) =>
+    api.post(`/api/incidents/${incidentId}/actions`, data),
   confirm: (actionId: number, ownerName: string) =>
     api.post(`/api/actions/${actionId}/confirm`, { owner_name: ownerName }),
   reject: (actionId: number) => api.post(`/api/actions/${actionId}/reject`),
+  updateStatus: (actionId: number, status: string, ownerName?: string) =>
+    api.post(`/api/actions/${actionId}/status`, { status, owner_name: ownerName }),
 };
 
 export const queryApi = {

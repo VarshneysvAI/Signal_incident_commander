@@ -184,40 +184,65 @@ class ParserService:
     def parse(self, text: str, speaker: str) -> Dict[str, Any]:
         """
         Parse utterance and return structured result.
-        When LLM is configured, uses semantic open-world classification to handle any incident domain.
-        Falls back to deterministic regex patterns for zero-downtime offline reliability.
+        Pipeline:
+        1. Fast sub-millisecond deterministic matching for standard incident keywords.
+        2. Open-world semantic LLM classification (NVIDIA NIM) for complex/unmatched domains.
+        3. Deterministic safety fallback.
         """
         normalized = self.normalize(text)
         
-        # 1. Primary: LLM semantic intelligence if credentials configured
-        if settings.llm_enabled:
-            llm_result = self._llm_classify(text, speaker)
-            if llm_result:
-                return llm_result
-        
-        # 2. Fallback: Fast deterministic patterns
+        # 1. Fast deterministic patterns
         match_result = self.match_pattern(normalized)
-        
         if match_result:
             ptype, pattern, match_start, match_end = match_result
             negated = self.detect_negation(normalized, match_start, match_end)
             topic = self.detect_topic(normalized)
             polarity = self.detect_polarity(normalized)
-            
-            # Determine confidence
             confidence = "high" if topic != "general" else "medium"
             
-            # Extract owner for actions
             owner = None
             action_status = None
             if ptype == "action":
                 owner, action_status = self.extract_owner(normalized, speaker)
             
-            # Create label
             label = normalized
             if negated:
                 label = f"[REJECTED] {normalized}"
             
+            # If high confidence specific topic or explicit assignment, return immediately
+            if ptype != "off_topic" and (topic != "general" or ptype in ["fact", "action", "decision"]):
+                return {
+                    "utterance_type": ptype,
+                    "topic": topic,
+                    "negated": negated,
+                    "confidence": confidence,
+                    "normalized_label": label,
+                    "polarity": polarity,
+                    "proposed_owner": owner,
+                    "action_status": action_status,
+                    "parser_method": "deterministic",
+                }
+
+        # 2. Open-world LLM semantic intelligence for complex or unclassified domains
+        if settings.llm_enabled:
+            llm_result = self._llm_classify(text, speaker)
+            if llm_result and llm_result.get("utterance_type") != "uncertain":
+                return llm_result
+
+        # 3. Fallback to deterministic match
+        if match_result:
+            ptype, pattern, match_start, match_end = match_result
+            negated = self.detect_negation(normalized, match_start, match_end)
+            topic = self.detect_topic(normalized)
+            polarity = self.detect_polarity(normalized)
+            confidence = "high" if topic != "general" else "medium"
+            owner = None
+            action_status = None
+            if ptype == "action":
+                owner, action_status = self.extract_owner(normalized, speaker)
+            label = normalized
+            if negated:
+                label = f"[REJECTED] {normalized}"
             return {
                 "utterance_type": ptype,
                 "topic": topic,
@@ -230,7 +255,7 @@ class ParserService:
                 "parser_method": "deterministic",
             }
         
-        # No pattern matched → uncertain
+        # 4. Fallback for completely unmatched utterances
         return {
             "utterance_type": "uncertain",
             "topic": "general",
@@ -274,33 +299,37 @@ Return ONLY raw JSON with these fields:
 }}"""
         
         try:
+            is_nvidia = "nvidia.com" in settings.llm_base_url or "nemotron" in settings.llm_model.lower()
+            payload: Dict[str, Any] = {
+                "model": settings.llm_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Speaker: {speaker}\nUtterance: {text}"}
+                ],
+                "temperature": 0.1,
+                "max_tokens": 512
+            }
+            if is_nvidia:
+                payload["chat_template_kwargs"] = {"enable_thinking": False}
+
             response = httpx.post(
                 f"{settings.llm_base_url}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {settings.llm_api_key}",
                     "Content-Type": "application/json"
                 },
-                json={
-                    "model": settings.llm_model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Speaker: {speaker}\nUtterance: {text}"}
-                    ],
-                    "temperature": 0.1,
-                    "max_tokens": 200
-                },
-                timeout=5.0
+                json=payload,
+                timeout=12.0
             )
             response.raise_for_status()
             data = response.json()
             content = data["choices"][0]["message"]["content"].strip()
             
-            # Remove markdown code block fences if present
-            if content.startswith("```"):
-                lines = content.splitlines()
-                content = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+            # Robust JSON extraction: handles markdown fences and preambles
+            json_match = re.search(r'(\{.*\})', content, re.DOTALL)
+            json_str = json_match.group(1) if json_match else content
             
-            llm_data = json.loads(content)
+            llm_data = json.loads(json_str)
             
             # Validate required fields
             required = ["utterance_type", "topic", "negated", "confidence", "normalized_label"]
@@ -311,14 +340,41 @@ Return ONLY raw JSON with these fields:
                 # Fallback to regex owner extraction if LLM didn't catch owner
                 if llm_data["utterance_type"] == "action" and not owner:
                     owner, action_status = self.extract_owner(text, speaker)
+
+                # Detect polarity for contradiction detection
+                polarity = self.detect_polarity(text)
+
+                # Normalize topic synonyms for cross-incident graph consistency
+                raw_topic = llm_data.get("topic", "general").lower().strip()
+                topic_synonyms = {
+                    "database": "db",
+                    "databases": "db",
+                    "sql": "db",
+                    "postgres": "db",
+                    "postgresql": "db",
+                    "mysql": "db",
+                    "caching": "cache",
+                    "redis": "cache",
+                    "memcached": "cache",
+                    "k8s": "kubernetes",
+                    "deploy": "deployment",
+                    "deploying": "deployment",
+                    "release": "deployment",
+                    "payment": "payments",
+                    "billing": "payments",
+                    "checkout": "payments",
+                    "auth": "auth",
+                    "authentication": "auth",
+                }
+                normalized_topic = topic_synonyms.get(raw_topic, raw_topic)
                 
                 return {
                     "utterance_type": llm_data["utterance_type"],
-                    "topic": llm_data.get("topic", "general").lower(),
+                    "topic": normalized_topic,
                     "negated": bool(llm_data.get("negated", False)),
                     "confidence": llm_data.get("confidence", "high"),
                     "normalized_label": llm_data["normalized_label"],
-                    "polarity": None,
+                    "polarity": polarity,
                     "proposed_owner": owner,
                     "action_status": action_status or "unassigned",
                     "parser_method": "llm",

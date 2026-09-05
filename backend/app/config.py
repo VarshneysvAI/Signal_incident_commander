@@ -10,11 +10,18 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    nvidia_api_key: Optional[str] = None
     llm_model: str = "gpt-4o-mini"
 
     def model_post_init(self, __context) -> None:
-        if not self.llm_api_key and self.openai_api_key:
-            self.llm_api_key = self.openai_api_key
+        if not self.llm_api_key:
+            if self.nvidia_api_key:
+                self.llm_api_key = self.nvidia_api_key
+                if "openai.com" in self.llm_base_url:
+                    self.llm_base_url = "https://integrate.api.nvidia.com/v1"
+                    self.llm_model = "nvidia/nemotron-3.5-lightning-30b-a3b"
+            elif self.openai_api_key:
+                self.llm_api_key = self.openai_api_key
 
     @property
     def llm_enabled(self) -> bool:
