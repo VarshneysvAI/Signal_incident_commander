@@ -47,9 +47,13 @@ interface AppState {
   debugDrawerOpen: boolean;
   setDebugDrawerOpen: (open: boolean) => void;
 
-  // Query
+  // Query & TTS
   lastQueryResult: { question: string; answer: string; sources: number[] } | null;
   setLastQueryResult: (result: { question: string; answer: string; sources: number[] } | null) => void;
+  ttsEnabled: boolean;
+  setTtsEnabled: (enabled: boolean) => void;
+  isSpeaking: boolean;
+  setIsSpeaking: (speaking: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -139,7 +143,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   debugDrawerOpen: false,
   setDebugDrawerOpen: (open) => set({ debugDrawerOpen: open }),
 
-  // Query
+  // Query & TTS
   lastQueryResult: null,
   setLastQueryResult: (result) => set({ lastQueryResult: result }),
+  ttsEnabled: true,
+  setTtsEnabled: (enabled) => set({ ttsEnabled: enabled }),
+  isSpeaking: false,
+  setIsSpeaking: (speaking) => set({ isSpeaking: speaking }),
 }));

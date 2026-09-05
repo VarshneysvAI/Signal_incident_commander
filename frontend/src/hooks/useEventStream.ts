@@ -63,10 +63,40 @@ export function useEventStream(incidentId: string | null) {
           'incident_created',
           'incident_closed',
           'followup_due',
+          'voice_query_answered',
+          'query_answered',
         ];
 
         if (refreshEventTypes.includes(data.event_type)) {
           refreshData();
+        }
+
+        // Handle voice query answers with Web Speech API zero-key TTS
+        if (data.event_type === 'voice_query_answered' || data.event_type === 'query_answered') {
+          const payload = data.payload_json || {};
+          const answer = payload.answer;
+          const question = payload.question || payload.clean_question || 'Voice Query';
+          const sources = payload.grounded_node_ids || [];
+
+          if (answer) {
+            useAppStore.getState().setLastQueryResult({ question, answer, sources });
+
+            // Zero-Key Voice Audio Output
+            if (typeof window !== 'undefined' && 'speechSynthesis' in window && useAppStore.getState().ttsEnabled) {
+              try {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(answer);
+                utterance.rate = 1.05;
+                utterance.pitch = 1.0;
+                utterance.onstart = () => useAppStore.getState().setIsSpeaking(true);
+                utterance.onend = () => useAppStore.getState().setIsSpeaking(false);
+                utterance.onerror = () => useAppStore.getState().setIsSpeaking(false);
+                window.speechSynthesis.speak(utterance);
+              } catch (ttsErr) {
+                console.warn('SpeechSynthesis playback failed:', ttsErr);
+              }
+            }
+          }
         }
       } catch (err) {
         console.error('Error processing SSE event:', err);

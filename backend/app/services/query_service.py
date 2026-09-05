@@ -53,7 +53,14 @@ class QueryService:
         db.add(EventLog(
             incident_id=incident_id,
             event_type="query_answered",
-            payload_json={"intent": intent, "speaker": speaker}
+            payload_json={
+                "intent": intent,
+                "speaker": speaker,
+                "question": text,
+                "answer": answer,
+                "grounded_node_ids": nodes,
+                "answer_method": query_record.answer_method
+            }
         ))
         
         return {
@@ -143,16 +150,19 @@ class QueryService:
         return " ".join(parts), node_ids
     
     def _answer_owner(self, db: Session, incident_id: str, text: str) -> Tuple[str, List[int]]:
-        keywords = set(text.lower().replace("who owns", "").replace("owner", "").split())
+        stop_words = {"who", "owns", "the", "a", "an", "is", "for", "of", "to", "in", "on", "owner", "signal", "hey", "assigned"}
+        tokens = [w.strip("?,.:;! ") for w in text.lower().split()]
+        keywords = {w for w in tokens if w and w not in stop_words}
         
         actions = db.query(ActionItem).filter(
             ActionItem.incident_id == incident_id,
-            ActionItem.status.in_(["committed", "pending_owner_confirmation", "unassigned"])
+            ActionItem.status.in_(["committed", "pending_owner_confirmation", "unassigned", "in_progress"])
         ).all()
         
         for action in actions:
             action_words = set(action.label.lower().split())
-            if keywords & action_words:
+            # Match on intersection of keywords or substring in label
+            if (keywords & action_words) or any(kw in action.label.lower() for kw in keywords if len(kw) > 2):
                 owner = action.confirmed_owner or action.proposed_owner or "unassigned"
                 return f"{owner} is assigned to '{action.label}'. Status: {action.status.value}.", [action.id]
         

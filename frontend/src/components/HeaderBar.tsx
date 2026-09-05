@@ -4,8 +4,8 @@ import { incidentsApi, API_BASE_URL } from '../api/client';
 import { Incident } from '../types';
 
 interface HeaderBarProps {
-  viewMode?: 'dashboard' | 'bridge';
-  onToggleViewMode?: (mode: 'dashboard' | 'bridge') => void;
+  viewMode?: 'dashboard' | 'room' | 'bridge';
+  onToggleViewMode?: (mode: 'dashboard' | 'room' | 'bridge') => void;
 }
 
 export function HeaderBar({ viewMode = 'dashboard', onToggleViewMode }: HeaderBarProps) {
@@ -136,18 +136,40 @@ export function HeaderBar({ viewMode = 'dashboard', onToggleViewMode }: HeaderBa
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {onToggleViewMode && (
-            <button
-              onClick={() => onToggleViewMode(viewMode === 'dashboard' ? 'bridge' : 'dashboard')}
-              className={`px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${
-                viewMode === 'bridge'
-                  ? 'bg-purple-600 text-white border-purple-500 hover:bg-purple-700'
-                  : 'bg-slate-700 text-purple-300 border-purple-500/50 hover:bg-slate-600'
-              }`}
-            >
-              {viewMode === 'bridge' ? '📊 Open Dashboard' : '🌉 Bridge Mode (Meet/Zoom)'}
-            </button>
+            <>
+              <button
+                onClick={() => onToggleViewMode('dashboard')}
+                className={`px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${
+                  viewMode === 'dashboard'
+                    ? 'bg-blue-600 text-white border-blue-500'
+                    : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+                }`}
+              >
+                📊 Dashboard
+              </button>
+              <button
+                onClick={() => onToggleViewMode('room')}
+                className={`px-3 py-1.5 rounded text-xs font-semibold border transition-colors flex items-center gap-1 ${
+                  viewMode === 'room'
+                    ? 'bg-green-600 text-white border-green-500 shadow-md'
+                    : 'bg-slate-700 text-green-300 border-green-500/50 hover:bg-slate-600'
+                }`}
+              >
+                <span>🎙️</span> Voice Room
+              </button>
+              <button
+                onClick={() => onToggleViewMode('bridge')}
+                className={`px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${
+                  viewMode === 'bridge'
+                    ? 'bg-purple-600 text-white border-purple-500'
+                    : 'bg-slate-700 text-purple-300 border-purple-500/50 hover:bg-slate-600'
+                }`}
+              >
+                🌉 Bridge (Meet)
+              </button>
+            </>
           )}
 
           {currentIncident && (

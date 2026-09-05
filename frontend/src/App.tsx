@@ -8,6 +8,7 @@ import { ActionsPanel } from './components/ActionsPanel';
 import { QueryBar } from './components/QueryBar';
 import { DebugDrawer } from './components/DebugDrawer';
 import { BridgePage } from './pages/BridgePage';
+import { RoomPage } from './pages/RoomPage';
 import { useAppStore } from './store';
 import { useEventStream } from './hooks/useEventStream';
 import { graphApi, documentApi, actionsApi } from './api/client';
@@ -26,7 +27,7 @@ function App() {
   const setRightTab = useAppStore((state) => state.setRightTab);
 
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<'dashboard' | 'bridge'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'room' | 'bridge'>('dashboard');
 
   useEventStream(currentIncident?.id || null);
 
@@ -71,7 +72,9 @@ function App() {
         </div>
       )}
 
-      {viewMode === 'bridge' ? (
+      {viewMode === 'room' ? (
+        <RoomPage />
+      ) : viewMode === 'bridge' ? (
         <div className="flex-1 overflow-y-auto">
           <BridgePage channelName={currentIncident?.channel_name || currentIncident?.title || 'incident-channel'} />
         </div>

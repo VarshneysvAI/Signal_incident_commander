@@ -45,6 +45,7 @@ class ParserService:
         r"(i|\w+) (will|can) (handle|take|fix|do)",
         r"assign(?:ed)?\s+(?:this\s+)?(?:to\s+)?(\w+)",
         r"(working on|looking into|investigating)",
+        r"\b(\w+)\s+please\s+(restart|handle|take|fix|do|check|investigate|rollback|run)",
     ]
     
     QUESTION_PATTERNS = [
@@ -147,6 +148,15 @@ class ParserService:
             if owner_candidate.lower() == speaker.lower():
                 return owner_candidate, "committed"
             return owner_candidate, "pending_owner_confirmation"
+        
+        # "(\w+) please (restart|handle|fix|...)"
+        match = re.search(r'\b(\w+)\s+please\b', text_lower)
+        if match:
+            owner_candidate = match.group(1).title()
+            if owner_candidate.lower() not in ['can', 'could', 'will', 'you', 'someone', 'all']:
+                if owner_candidate.lower() == speaker.lower():
+                    return owner_candidate, "committed"
+                return owner_candidate, "pending_owner_confirmation"
         
         return None, "unassigned"
     

@@ -21,6 +21,54 @@ def create_utterance(
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     
+    import re
+    # Check for wake word: "Signal, ..." or "Hey Signal, ..."
+    wake_match = re.match(r"^(?:hey\s+)?signal[,:]?\s*(.*)", utterance.text.strip(), re.IGNORECASE)
+    if wake_match:
+        from ..services.query_service import query_service
+        query_text = wake_match.group(1).strip()
+        if not query_text:
+            query_text = utterance.text.strip()
+            
+        result = query_service.answer_query(db, incident_id, query_text, utterance.speaker_name)
+        
+        db_utterance = Utterance(
+            incident_id=incident_id,
+            speaker_name=utterance.speaker_name,
+            text=utterance.text,
+            normalized_text=query_text,
+            parser_type="query",
+            parser_method=ParserMethod.deterministic,
+            confidence=Confidence.high,
+            negated=False,
+            topic="query",
+            raw_parser_json=result
+        )
+        db.add(db_utterance)
+        db.flush()
+        
+        # Log voice_query_answered event for SSE and TTS
+        event = EventLog(
+            incident_id=incident_id,
+            event_type="voice_query_answered",
+            payload_json={
+                "question": utterance.text,
+                "clean_question": query_text,
+                "answer": result.get("answer"),
+                "intent": result.get("intent"),
+                "grounded_node_ids": result.get("grounded_node_ids", []),
+                "speaker": utterance.speaker_name,
+                "answer_method": result.get("answer_method", "template")
+            }
+        )
+        db.add(event)
+        
+        # NOTE: graph_service.process_utterance is intentionally omitted
+        # to prevent question pollution in the knowledge graph.
+        db.commit()
+        db.refresh(db_utterance)
+        return db_utterance
+    
     # Parse utterance
     parsed = parser_service.parse(utterance.text, utterance.speaker_name)
     

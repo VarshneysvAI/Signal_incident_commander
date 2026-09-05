@@ -19,6 +19,7 @@ def agora_transcript_webhook(
     Receive Agora transcript webhook.
     Expected payload: {event_id, channel_name, speaker_uid, speaker_name, text, timestamp}
     """
+    import re
     from ..config import settings
     
     # Verify secret if configured
@@ -29,11 +30,48 @@ def agora_transcript_webhook(
     # Extract fields (flexible schema)
     event_id = payload.get("event_id")
     channel_name = payload.get("channel_name")
-    speaker_name = payload.get("speaker_name", "Unknown")
+    payload_incident_id = payload.get("incident_id")
+    speaker_uid = payload.get("speaker_uid")
+    speaker_name = payload.get("speaker_name")
     text = payload.get("text", "")
     
     if not event_id or not text:
         raise HTTPException(status_code=400, detail="Missing event_id or text")
+    
+    # 1. Echo-Loop Guard: Ignore audio emitted by the agent itself
+    speaker_uid_str = str(speaker_uid or "").strip().lower()
+    speaker_name_str = str(speaker_name or "").strip().lower()
+    AGENT_IDENTIFIERS = {"agent", "signal_agent", "cai_agent", "signal", "999999"}
+    
+    if (
+        payload.get("is_agent")
+        or speaker_uid_str in AGENT_IDENTIFIERS
+        or speaker_name_str in AGENT_IDENTIFIERS
+    ):
+        return {"status": "ignored", "reason": "echo_loop_agent_audio"}
+    
+    # 2. Speaker Mapping: Map speaker_uid to human name
+    DEFAULT_SPEAKER_MAP = {
+        "1001": "Alice",
+        "1002": "Bob",
+        "1003": "Carol",
+        "1004": "Dave",
+        "alice": "Alice",
+        "bob": "Bob",
+        "carol": "Carol",
+        "dave": "Dave",
+    }
+    
+    custom_map = payload.get("speaker_map") or {}
+    if not speaker_name or speaker_name == "Unknown":
+        if speaker_uid_str in custom_map:
+            speaker_name = custom_map[speaker_uid_str]
+        elif speaker_uid_str in DEFAULT_SPEAKER_MAP:
+            speaker_name = DEFAULT_SPEAKER_MAP[speaker_uid_str]
+        elif speaker_uid:
+            speaker_name = f"Speaker {speaker_uid}"
+        else:
+            speaker_name = "Unknown"
     
     # Dedup by event_id
     from ..models import Utterance
@@ -41,21 +79,24 @@ def agora_transcript_webhook(
     if existing:
         return {"status": "ignored", "reason": "duplicate"}
     
-    # Find or create incident by channel_name
-    incident = db.query(Incident).filter(
-        Incident.channel_name == channel_name
-    ).first()
+    # Find or create incident by incident_id or channel_name
+    incident = None
+    if payload_incident_id:
+        incident = db.query(Incident).filter(Incident.id == payload_incident_id).first()
+    if not incident and channel_name:
+        incident = db.query(Incident).filter(Incident.channel_name == channel_name).first()
     
     if not incident:
         # Create new incident
         from datetime import datetime
         import uuid as uuid_mod
         
+        target_ch = channel_name or "default-voice"
         incident_id = str(uuid_mod.uuid4())[:8]
         incident = Incident(
             id=incident_id,
-            title=f"Voice Incident: {channel_name}",
-            channel_name=channel_name,
+            title=f"Voice Incident: {target_ch}",
+            channel_name=target_ch,
             status=IncidentStatus.active
         )
         db.add(incident)
@@ -73,11 +114,64 @@ def agora_transcript_webhook(
         db.add(incident_node)
         db.flush()
     
-    # Process utterance (same as text input)
     from ..services.parser_service import parser_service
     from ..services.graph_service import graph_service
+    from ..services.query_service import query_service
     from ..models import EventLog, ParserMethod, Confidence as ConfEnum
     
+    # 3. Wake-Word Detection & Auto-Routing (Skip Graph Nodes)
+    wake_match = re.match(r"^(?:hey\s+)?signal[,:]?\s*(.*)", text.strip(), re.IGNORECASE)
+    if wake_match:
+        query_text = wake_match.group(1).strip()
+        if not query_text:
+            query_text = text.strip()
+            
+        query_res = query_service.answer_query(db, incident.id, query_text, speaker_name)
+        
+        utterance = Utterance(
+            incident_id=incident.id,
+            event_id=event_id,
+            speaker_name=speaker_name,
+            text=text,
+            normalized_text=query_text,
+            parser_type="query",
+            parser_method=ParserMethod.deterministic,
+            confidence=ConfEnum.high,
+            negated=False,
+            topic="query",
+            raw_parser_json=query_res
+        )
+        db.add(utterance)
+        db.flush()
+        
+        # Broadcast voice_query_answered for SSE and browser TTS
+        db.add(EventLog(
+            incident_id=incident.id,
+            event_type="voice_query_answered",
+            payload_json={
+                "question": text,
+                "clean_question": query_text,
+                "answer": query_res.get("answer"),
+                "intent": query_res.get("intent"),
+                "grounded_node_ids": query_res.get("grounded_node_ids", []),
+                "speaker": speaker_name,
+                "answer_method": query_res.get("answer_method", "template"),
+                "source": "agora_webhook"
+            }
+        ))
+        
+        # CRITICAL: graph_service.process_utterance is NOT called here
+        # to avoid polluting the incident knowledge graph with queries.
+        db.commit()
+        return {
+            "status": "ok",
+            "incident_id": incident.id,
+            "utterance_id": utterance.id,
+            "type": "voice_query",
+            "answer": query_res.get("answer")
+        }
+    
+    # 4. Standard Utterance Processing (Creates Graph Nodes/Edges)
     parsed = parser_service.parse(text, speaker_name)
     
     utterance = Utterance(

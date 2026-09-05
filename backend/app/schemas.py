@@ -156,6 +156,21 @@ class QueryResponse(BaseModel):
     grounded_node_ids: List[int] = []
 
 
+class QueryRecordResponse(BaseModel):
+    id: int
+    incident_id: str
+    speaker: Optional[str] = None
+    text: str
+    intent: Optional[str] = None
+    answer: str
+    answer_method: str = "template"
+    grounded_node_ids: List[int] = []
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ExportFormat(str, Enum):
     markdown = "markdown"
     json = "json"
@@ -170,6 +185,21 @@ class AgoraTokenResponse(BaseModel):
     token: str
     channel_name: str
     uid: Union[int, str]
+    app_id: Optional[str] = None
+
+
+class StartAgentRequest(BaseModel):
+    channel_name: str
+    agent_uid: Union[int, str] = 999999
+    language: str = "en-US"
+
+
+class StartAgentResponse(BaseModel):
+    status: str
+    channel_name: str
+    agent_uid: Union[int, str]
+    mode: str
+    message: str
 
 
 class HealthResponse(BaseModel):

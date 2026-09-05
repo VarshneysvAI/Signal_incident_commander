@@ -382,6 +382,47 @@ This script:
 
 ---
 
+## 🎙️ Voice Verification Runbook (Track 3: Voice-Native Demo)
+
+SIGNAL Commander is voice-native and designed for Agora RTC voice channels. Real speakers can speak into the microphone, hear zero-key synthesized voice answers, and see real-time knowledge graphs update without manual typing.
+
+### 1. In-App Agora Voice Room (`/room`)
+- Open the dashboard and click **🎙️ Voice Room** in the top navigation bar.
+- **Select a Speaker Profile**: Choose between Alice (UID 1001), Bob (1002), Carol (1003), Dave (1004), or set a custom name & UID.
+- **Microphone RTC**: Click **Join Agora Room & Publish Mic** to capture live microphone audio with real-time volume level visualizer (`track.getVolumeLevel()`).
+- **Zero-Key TTS Audio**: Native browser speech synthesis speaks all SIGNAL answers aloud without requiring any external paid TTS keys. Toggle on/off anytime with the **🔊 / 🔇** button.
+- **Echo-Loop Guard**: Automatically filters out audio emitted by the agent itself (`speaker_uid == "agent"`), preventing acoustic feedback loops.
+
+### 2. The 8-Line Spoken Demo Script
+Speak (or click to inject) these lines into the Voice Room in sequence:
+
+| Step | Speaker | Spoken Utterance | Observed System Behavior |
+|------|---------|------------------|--------------------------|
+| **1** | **Alice** (1001) | *"We verified the payment gateway is returning 504 gateway timeouts."* | 🟢 **Fact Node** created; confidence=high |
+| **2** | **Bob** (1002) | *"I think the database connection pool is exhausted."* | 🔵 **Hypothesis Node** created |
+| **3** | **Carol** (1003) | *"The database metrics show 0% connection pool usage."* | 🔴 **Contradiction Edge** formed; Bob's hypothesis fades |
+| **4** | **Dave** (1004) | *"Bob please restart the database connection pool"* | 📋 **Action Item** assigned to Bob (pending confirmation) |
+| **5** | **Bob** (1002) | *"I will handle the connection pool restart now"* | ✅ **Action Committed** to Bob |
+| **6** | **Alice** (1001) | *"Signal, what is our status?"* | ⚡ **Wake-Word Answered**: Spoken status summary via TTS; **0 graph nodes created** (no graph pollution!) |
+| **7** | **Carol** (1003) | *"Hey Signal, who owns the database connection pool?"* | 🔊 **Spoken TTS**: *"Bob is assigned to 'restart the database connection pool'. Status: committed."* |
+| **8** | **Dave** (1004) | *"We decided to failover traffic to region us-east-2"* | 🟣 **Decision Node** created in knowledge graph |
+
+### 3. Automated Voice Verification Commands
+Run the voice suite locally:
+
+```bash
+# 1. Run all Agora & voice unit/integration tests
+pytest -v tests/test_agora.py
+
+# 2. Run the automated bash voice smoke test
+./scripts/voice_smoke.sh
+
+# 3. Or run the cross-platform Python voice test
+python scripts/voice_smoke.py http://localhost:8000
+```
+
+---
+
 ## 🤝 Contributing
 
 1. Fork the repository
