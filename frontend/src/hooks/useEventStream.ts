@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { eventsApi, graphApi, documentApi, actionsApi } from '../api/client';
 import { EventLog } from '../types';
+import { ttsSpeaker } from '../utils/ttsSpeaker';
 
 export function useEventStream(incidentId: string | null) {
   const addEvent = useAppStore((state) => state.addEvent);
@@ -81,20 +82,13 @@ export function useEventStream(incidentId: string | null) {
           if (answer) {
             useAppStore.getState().setLastQueryResult({ question, answer, sources });
 
-            // Zero-Key Voice Audio Output
-            if (typeof window !== 'undefined' && 'speechSynthesis' in window && useAppStore.getState().ttsEnabled) {
-              try {
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(answer);
-                utterance.rate = 1.05;
-                utterance.pitch = 1.0;
-                utterance.onstart = () => useAppStore.getState().setIsSpeaking(true);
-                utterance.onend = () => useAppStore.getState().setIsSpeaking(false);
-                utterance.onerror = () => useAppStore.getState().setIsSpeaking(false);
-                window.speechSynthesis.speak(utterance);
-              } catch (ttsErr) {
-                console.warn('SpeechSynthesis playback failed:', ttsErr);
-              }
+            // High-Fidelity Studio Neural TTS Voice Output
+            if (useAppStore.getState().ttsEnabled) {
+              ttsSpeaker.speak(answer, {
+                onStart: () => useAppStore.getState().setIsSpeaking(true),
+                onEnd: () => useAppStore.getState().setIsSpeaking(false),
+                onError: () => useAppStore.getState().setIsSpeaking(false),
+              });
             }
           }
         }

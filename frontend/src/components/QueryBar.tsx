@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { queryApi } from '../api/client';
+import { ttsSpeaker } from '../utils/ttsSpeaker';
 
 export function QueryBar() {
   const [query, setQuery] = useState('');
@@ -45,16 +46,13 @@ export function QueryBar() {
       });
       setQuery('');
 
-      // If TTS enabled, speak answer out loud
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window && ttsEnabled && answer) {
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(answer);
-        utter.rate = 1.0;
-        utter.pitch = 1.0;
-        utter.onstart = () => setIsSpeaking(true);
-        utter.onend = () => setIsSpeaking(false);
-        utter.onerror = () => setIsSpeaking(false);
-        window.speechSynthesis.speak(utter);
+      // Studio-Grade Neural Voice Audio Output
+      if (ttsEnabled && answer) {
+        ttsSpeaker.speak(answer, {
+          onStart: () => setIsSpeaking(true),
+          onEnd: () => setIsSpeaking(false),
+          onError: () => setIsSpeaking(false),
+        });
       }
     } catch (error) {
       console.error('Failed to query:', error);
@@ -143,10 +141,8 @@ export function QueryBar() {
   };
 
   const stopSpeaking = () => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-    }
+    ttsSpeaker.stop();
+    setIsSpeaking(false);
   };
 
   return (
