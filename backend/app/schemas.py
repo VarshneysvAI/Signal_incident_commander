@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
 
@@ -163,13 +163,13 @@ class ExportFormat(str, Enum):
 
 class AgoraTokenRequest(BaseModel):
     channel_name: str
-    uid: int = 0
+    uid: Union[int, str] = 0
 
 
 class AgoraTokenResponse(BaseModel):
     token: str
     channel_name: str
-    uid: int
+    uid: Union[int, str]
 
 
 class HealthResponse(BaseModel):

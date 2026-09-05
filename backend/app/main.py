@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .db import engine, Base, get_db, SessionLocal
-from .api import health, incidents, utterances, graph, query, actions, export, agora, webhooks, events, followups
+from .api import health, incidents, utterances, graph, query, actions, export, agora, webhooks, events, followups, document
 from app.services.followup_service import start_followup_worker, stop_followup_worker
 
 # Create database tables
@@ -42,6 +42,7 @@ app.include_router(agora.router, prefix="/api")
 app.include_router(webhooks.router)
 app.include_router(events.router, prefix="/api")
 app.include_router(followups.router, prefix="/api")
+app.include_router(document.router, prefix="/api")
 
 
 @app.get("/")

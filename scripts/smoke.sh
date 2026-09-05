@@ -125,7 +125,7 @@ fi
 echo ""
 echo "7. Testing action confirmation..."
 ACTIONS=$(curl -s "$BASE_URL/api/incidents/$INCIDENT_ID/actions")
-ACTION_ID=$(echo "$ACTIONS" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+ACTION_ID=$(echo "$ACTIONS" | grep -oE '"id":\s*[0-9]+' | head -1 | grep -oE '[0-9]+')
 if [ -n "$ACTION_ID" ]; then
     CONFIRM=$(curl -s -X POST "$BASE_URL/api/actions/$ACTION_ID/confirm" \
         -H "Content-Type: application/json" \

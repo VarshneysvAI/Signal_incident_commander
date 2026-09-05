@@ -7,6 +7,7 @@ import { GapRadar } from './components/GapRadar';
 import { ActionsPanel } from './components/ActionsPanel';
 import { QueryBar } from './components/QueryBar';
 import { DebugDrawer } from './components/DebugDrawer';
+import { BridgePage } from './pages/BridgePage';
 import { useAppStore } from './store';
 import { useEventStream } from './hooks/useEventStream';
 import { graphApi, documentApi, actionsApi } from './api/client';
@@ -25,6 +26,7 @@ function App() {
   const setRightTab = useAppStore((state) => state.setRightTab);
 
   const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'dashboard' | 'bridge'>('dashboard');
 
   useEventStream(currentIncident?.id || null);
 
@@ -61,7 +63,7 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-900">
-      <HeaderBar />
+      <HeaderBar viewMode={viewMode} onToggleViewMode={setViewMode} />
       
       {loading && (
         <div className="absolute top-16 left-0 right-0 bg-blue-600 text-white text-center py-2 z-50">
@@ -69,10 +71,16 @@ function App() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden p-4 gap-4">
-        <div className="w-[45%] flex flex-col">
-          <KnowledgeGraph />
+      {viewMode === 'bridge' ? (
+        <div className="flex-1 overflow-y-auto">
+          <BridgePage channelName={currentIncident?.channel_name || currentIncident?.title || 'incident-channel'} />
         </div>
+      ) : (
+        <>
+          <div className="flex-1 flex overflow-hidden p-4 gap-4">
+            <div className="w-[45%] flex flex-col">
+              <KnowledgeGraph />
+            </div>
 
         <div className="w-[30%] flex flex-col">
           <div className="bg-slate-800 rounded-t-lg border border-slate-700 px-4 py-2 flex gap-4">
@@ -148,6 +156,8 @@ function App() {
 
       <QueryBar />
       <DebugDrawer />
+        </>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -14,6 +14,7 @@ export const healthApi = {
 };
 
 export const incidentsApi = {
+  list: () => api.get('/api/incidents'),
   create: (data: { title: string; channel_name?: string }) => 
     api.post('/api/incidents', data),
   getById: (id: string) => api.get(`/api/incidents/${id}`),

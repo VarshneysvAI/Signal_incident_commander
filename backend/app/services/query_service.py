@@ -4,6 +4,7 @@ from ..models import (
     GraphNode, GraphEdge, Utterance, ActionItem, QueryRecord, EventLog, Incident,
     NodeType, NodeStatus, EdgeType
 )
+from ..config import settings
 
 
 class QueryService:

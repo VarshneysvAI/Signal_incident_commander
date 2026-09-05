@@ -21,7 +21,7 @@ class AgoraService:
     def generate_token(
         self, 
         channel_name: str, 
-        uid: int = 0,
+        uid: int | str = 0,
         expiration: int = 3600
     ) -> Optional[str]:
         """
@@ -37,16 +37,26 @@ class AgoraService:
             # Import agora-token if available, otherwise use manual implementation
             try:
                 from agora_token_builder import RtcTokenBuilder2
-                token = RtcTokenBuilder2.build_token_with_uid(
-                    self.app_id,
-                    self.app_certificate,
-                    channel_name,
-                    uid,
-                    "publisher",
-                    int(time.time()) + expiration
-                )
+                if isinstance(uid, int):
+                    token = RtcTokenBuilder2.build_token_with_uid(
+                        self.app_id,
+                        self.app_certificate,
+                        channel_name,
+                        uid,
+                        "publisher",
+                        int(time.time()) + expiration
+                    )
+                else:
+                    token = RtcTokenBuilder2.build_token_with_user_account(
+                        self.app_id,
+                        self.app_certificate,
+                        channel_name,
+                        str(uid),
+                        "publisher",
+                        int(time.time()) + expiration
+                    )
                 return token
-            except ImportError:
+            except (ImportError, AttributeError):
                 # Fallback to manual token generation (simplified version)
                 return self._generate_token_manual(channel_name, uid, expiration)
         except Exception as e:
@@ -56,7 +66,7 @@ class AgoraService:
     def _generate_token_manual(
         self, 
         channel_name: str, 
-        uid: int, 
+        uid: int | str, 
         expiration: int
     ) -> str:
         """

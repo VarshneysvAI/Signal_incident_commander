@@ -172,3 +172,46 @@ def test_action_confirm_to_committed(client):
         assert confirm_resp.status_code == 200
         data = confirm_resp.json()
         assert data["status"] == "committed"
+
+
+def test_document_and_timeline_endpoints(client):
+    """Test GET /api/incidents/{id}/document and GET /api/incidents/{id}/timeline"""
+    incident_resp = client.post("/api/incidents", json={
+        "title": "Doc Test",
+        "channel_name": "doc-test"
+    })
+    incident_id = incident_resp.json()["id"]
+    
+    # Add utterances
+    client.post(f"/api/incidents/{incident_id}/utterances", json={
+        "speaker_name": "Alice",
+        "text": "Metrics show DB is healthy"
+    })
+    client.post(f"/api/incidents/{incident_id}/utterances", json={
+        "speaker_name": "Carol",
+        "text": "Redis cache is failing"
+    })
+    client.post(f"/api/incidents/{incident_id}/utterances", json={
+        "speaker_name": "Dave",
+        "text": "I will handle the fix"
+    })
+    
+    # Test document endpoint
+    doc_resp = client.get(f"/api/incidents/{incident_id}/document")
+    assert doc_resp.status_code == 200
+    doc = doc_resp.json()
+    assert "summary" in doc
+    assert doc["summary"]["title"] == "Doc Test"
+    assert "sections" in doc
+    assert len(doc["sections"]) >= 4
+    assert "gaps" in doc
+    # Check that gaps were calculated
+    assert len(doc["gaps"]) >= 1
+    
+    # Test timeline endpoint
+    timeline_resp = client.get(f"/api/incidents/{incident_id}/timeline")
+    assert timeline_resp.status_code == 200
+    timeline = timeline_resp.json()
+    assert len(timeline) == 3
+    assert timeline[0]["speaker_name"] == "Alice"
+

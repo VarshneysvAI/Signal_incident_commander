@@ -32,24 +32,29 @@ class FollowUpService:
         
         return stale
     
-    def has_recent_reminder(self, action_id: str, minutes: int = 10) -> bool:
-        """Check if a reminder was sent recently"""
-        recent = self.db.query(EventLog).filter(
+    def has_recent_reminder(self, action: ActionItem, minutes: int = 10) -> bool:
+        """Check if a reminder was sent recently for this action"""
+        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        recent_events = self.db.query(EventLog).filter(
             EventLog.event_type == "followup_due",
-            EventLog.incident_id == ActionItem.incident_id,
-            EventLog.created_at > datetime.utcnow() - timedelta(minutes=minutes)
-        ).first()
+            EventLog.incident_id == action.incident_id,
+            EventLog.created_at > cutoff
+        ).all()
         
-        return recent is not None
+        for event in recent_events:
+            if event.payload_json and event.payload_json.get("action_id") == action.id:
+                return True
+        return False
     
     def create_followup_event(self, action: ActionItem):
         """Create a followup event log"""
+        age = (datetime.utcnow() - action.created_at).total_seconds() / 60 if action.created_at else 0
         payload = {
             "action_id": action.id,
             "action_label": action.label,
             "owner": action.confirmed_owner or action.proposed_owner,
-            "status": action.status.value,
-            "age_minutes": (datetime.utcnow() - action.created_at).total_seconds() / 60,
+            "status": action.status.value if hasattr(action.status, 'value') else str(action.status),
+            "age_minutes": age,
             "incident_id": action.incident_id
         }
         
@@ -72,23 +77,24 @@ class FollowUpService:
         
         for action in stale_actions:
             # Skip if recently reminded
-            if self.has_recent_reminder(action.id, reminder_interval):
+            if self.has_recent_reminder(action, reminder_interval):
                 continue
             
             # Create event log
             event = self.create_followup_event(action)
             
             # Send Slack notification if configured
-            if settings.SLACK_WEBHOOK_URL:
-                integration = IntegrationService(self.db)
+            if settings.slack_enabled:
+                integration = IntegrationService()
                 owner_name = action.confirmed_owner or action.proposed_owner or "Someone"
+                age_minutes = (datetime.utcnow() - action.created_at).total_seconds() / 60 if action.created_at else 0
                 
                 message = (
                     f"🔔 *Action Follow-up*\n"
                     f"*Task:* {action.label}\n"
                     f"*Owner:* {owner_name}\n"
-                    f"*Status:* {action.status.value}\n"
-                    f"*Age:* {(datetime.utcnow() - action.created_at).total_seconds() / 60:.0f} minutes\n"
+                    f"*Status:* {action.status.value if hasattr(action.status, 'value') else str(action.status)}\n"
+                    f"*Age:* {age_minutes:.0f} minutes\n"
                     f"\nPlease provide an update on this action item."
                 )
                 
@@ -109,17 +115,18 @@ async def start_followup_worker(db_session_factory):
                 db = db_session_factory()
                 service = FollowUpService(db)
                 await service.scan_and_notify(
-                    stale_minutes=settings.FOLLOWUP_STALE_MINUTES,
+                    stale_minutes=settings.followup_stale_minutes,
                     reminder_interval=10
                 )
                 db.close()
             except Exception as e:
                 print(f"Follow-up worker error: {e}")
             
-            await asyncio.sleep(settings.FOLLOWUP_SCAN_SECONDS)
+            await asyncio.sleep(settings.followup_scan_seconds)
     
     followup_task = asyncio.create_task(worker())
     return followup_task
+
 
 
 async def stop_followup_worker():

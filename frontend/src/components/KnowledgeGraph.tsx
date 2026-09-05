@@ -1,6 +1,7 @@
 import React from 'react';
 import { useEffect, useRef } from 'react';
 import { Network } from 'vis-network/standalone';
+import { DataSet } from 'vis-data';
 import { useAppStore } from '../store';
 import { GraphNode, GraphEdge } from '../types';
 
@@ -53,6 +54,7 @@ export function KnowledgeGraph() {
     }));
 
     const edges = graphData.edges.map((edge: GraphEdge) => ({
+      id: edge.id,
       from: edge.from_node_id,
       to: edge.to_node_id,
       label: edge.type.replace('_', ' '),
@@ -62,9 +64,9 @@ export function KnowledgeGraph() {
       arrows: 'to',
     }));
 
-    const data = {
-      nodes: new (window as any).vis.DataSet(nodes),
-      edges: new (window as any).vis.DataSet(edges),
+    const data: any = {
+      nodes: new DataSet(nodes),
+      edges: new DataSet(edges),
     };
     
     const options: any = {
