@@ -344,8 +344,22 @@ class TestGraphService:
     
     def test_graph_edges_created(self, test_db, test_incident):
         """Edges are created between nodes."""
-        get_db_func, _ = test_db
+        get_db_func, engine = test_db
+        
+        # Create incident node manually since we're bypassing the API
+        from app.models import GraphNode, NodeType, NodeStatus, Confidence
         db = next(get_db_func())
+        
+        incident_node = GraphNode(
+            incident_id=test_incident.id,
+            type=NodeType.incident,
+            label=test_incident.title,
+            status=NodeStatus.active,
+            confidence=Confidence.high,
+            metadata_json={}
+        )
+        db.add(incident_node)
+        db.commit()
         
         # Create hypothesis
         utterance1 = Utterance(

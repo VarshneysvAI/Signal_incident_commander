@@ -94,6 +94,10 @@ class GraphService:
         # Check for contradictions
         from ..services.contradiction_service import contradiction_service
         contradiction_service.check_fact_contradictions(db, node)
+        
+        # Flush and commit to ensure status changes persist
+        db.flush()
+        db.commit()
     
     def _create_hypothesis_node(self, db, incident_id, incident_node, utterance, label, speaker, topic, confidence, negated, parsed):
         polarity = parsed.get("polarity")
@@ -137,8 +141,9 @@ class GraphService:
         from ..services.contradiction_service import contradiction_service
         contradiction_service.check_hypothesis_contradictions(db, node)
         
-        # Flush to ensure status changes are persisted
+        # Flush again to ensure status changes are persisted
         db.flush()
+        db.commit()
     
     def _create_decision_node(self, db, incident_id, incident_node, utterance, label, speaker, topic, confidence, negated):
         status = NodeStatus.rejected if negated else NodeStatus.active
@@ -240,6 +245,10 @@ class GraphService:
             event_type="action_created",
             payload_json={"label": label, "owner": proposed_owner, "status": action_status_str}
         ))
+        
+        # Flush and commit to ensure ActionItem is persisted
+        db.flush()
+        db.commit()
     
     def _create_question_node(self, db, incident_id, incident_node, utterance, label, speaker, topic):
         node = GraphNode(
