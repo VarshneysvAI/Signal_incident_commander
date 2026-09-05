@@ -134,10 +134,12 @@ function App() {
             </div>
           </div>
 
-          <QueryBar />
           <DebugDrawer />
         </>
       )}
+
+      {/* Always-Live Query Bar — visible on every view */}
+      <QueryBar />
     </div>
   );
 }
