@@ -36,24 +36,27 @@ class AgoraService:
         try:
             # Import agora-token if available, otherwise use manual implementation
             try:
-                from agora_token_builder import RtcTokenBuilder2
-                if isinstance(uid, int):
-                    token = RtcTokenBuilder2.build_token_with_uid(
+                from agora_token_builder import RtcTokenBuilder
+                expire_ts = int(time.time()) + expiration
+                role_publisher = 1
+                try:
+                    num_uid = int(uid)
+                    token = RtcTokenBuilder.buildTokenWithUid(
                         self.app_id,
                         self.app_certificate,
                         channel_name,
-                        uid,
-                        "publisher",
-                        int(time.time()) + expiration
+                        num_uid,
+                        role_publisher,
+                        expire_ts
                     )
-                else:
-                    token = RtcTokenBuilder2.build_token_with_user_account(
+                except (ValueError, TypeError):
+                    token = RtcTokenBuilder.buildTokenWithAccount(
                         self.app_id,
                         self.app_certificate,
                         channel_name,
                         str(uid),
-                        "publisher",
-                        int(time.time()) + expiration
+                        role_publisher,
+                        expire_ts
                     )
                 return token
             except (ImportError, AttributeError):

@@ -67,9 +67,13 @@ class Settings(BaseSettings):
             and len(self.smtp_password) > 0
         )
     
+    # Environment
+    environment: str = "development"
+
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"
 
 
 settings = Settings()
