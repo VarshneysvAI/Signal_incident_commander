@@ -81,46 +81,44 @@ export function QueryBar() {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = true;
+    recognition.continuous = false; // Single-turn query mode: stops as soon as question finishes!
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: any) => {
-      // Echo-loop guard: Ignore audio if SIGNAL is currently speaking through TTS
-      if (useAppStore.getState().isSpeaking) {
-        setVoiceInterim('');
-        return;
-      }
-
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           const finalText = transcript.trim();
           if (finalText.length > 2) {
-            setVoiceInterim('');
+            // STOP recognition immediately so it CANNOT listen to itself or the upcoming TTS!
+            stopVoiceQuery();
             handleQuery(finalText);
+            return;
           }
         } else {
           interim += transcript;
         }
       }
-      if (interim && !useAppStore.getState().isSpeaking) {
+      if (interim) {
         setVoiceInterim(interim);
       }
     };
 
     recognition.onerror = (event: any) => {
-      if (event.error === 'no-speech') return;
+      if (event.error === 'no-speech') {
+        stopVoiceQuery();
+        return;
+      }
       console.warn('Voice query recognition error:', event.error);
+      stopVoiceQuery();
     };
 
     recognition.onend = () => {
-      if (isListeningRef.current) {
-        try {
-          recognition.start();
-        } catch (e) {}
-      }
+      setVoiceListening(false);
+      setVoiceInterim('');
+      recognitionRef.current = null;
     };
 
     recognitionRef.current = recognition;
@@ -131,6 +129,7 @@ export function QueryBar() {
       recognition.start();
     } catch (e) {
       console.warn('Failed to start voice query:', e);
+      stopVoiceQuery();
     }
   };
 
@@ -140,7 +139,7 @@ export function QueryBar() {
     setVoiceInterim('');
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        recognitionRef.current.abort();
       } catch (e) {}
       recognitionRef.current = null;
     }
