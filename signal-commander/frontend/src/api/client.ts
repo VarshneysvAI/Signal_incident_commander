@@ -55,12 +55,18 @@ export const exportApi = {
 };
 
 export const agoraApi = {
-  getToken: (channelName: string, uid: number) =>
+  getToken: (channelName: string, uid: number | string) =>
     api.post('/api/agora/token', { channel_name: channelName, uid }),
+};
+
+export const followupsApi = {
+  getFollowups: (incidentId: string) =>
+    api.get(`/api/incidents/${incidentId}/followups`),
 };
 
 export const eventsApi = {
   getEventStream: (incidentId: string) => `${API_BASE_URL}/api/incidents/${incidentId}/events`,
 };
 
+export const apiClient = api;
 export default api;
