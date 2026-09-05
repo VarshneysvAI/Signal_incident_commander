@@ -157,6 +157,12 @@ export function useVoiceCommander(incidentId: string | null) {
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: any) => {
+      // Echo-loop guard: Ignore audio while SIGNAL is actively speaking
+      if (useAppStore.getState().isSpeaking) {
+        setInterimTranscript('');
+        return;
+      }
+
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const transcript = event.results[i][0].transcript;
@@ -174,7 +180,7 @@ export function useVoiceCommander(incidentId: string | null) {
           interim += transcript;
         }
       }
-      if (interim) {
+      if (interim && !useAppStore.getState().isSpeaking) {
         const parsed = parseInSpeechSpeaker(interim, selectedSpeakerRef.current, respondersRef.current);
         setInterimTranscript(`${parsed.speaker.avatar} ${parsed.speaker.name}: "${parsed.text}"`);
       }

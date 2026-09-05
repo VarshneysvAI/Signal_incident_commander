@@ -86,6 +86,12 @@ export function QueryBar() {
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: any) => {
+      // Echo-loop guard: Ignore audio if SIGNAL is currently speaking through TTS
+      if (useAppStore.getState().isSpeaking) {
+        setVoiceInterim('');
+        return;
+      }
+
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const transcript = event.results[i][0].transcript;
@@ -99,7 +105,7 @@ export function QueryBar() {
           interim += transcript;
         }
       }
-      if (interim) {
+      if (interim && !useAppStore.getState().isSpeaking) {
         setVoiceInterim(interim);
       }
     };

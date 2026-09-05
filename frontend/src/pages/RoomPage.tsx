@@ -253,6 +253,13 @@ export const RoomPage: React.FC = () => {
         recognition.lang = 'en-US';
 
         recognition.onresult = (event: any) => {
+          // Echo-loop guard: Ignore audio while SIGNAL is speaking
+          if (useAppStore.getState().isSpeaking) {
+            setInterimTranscript('');
+            setInterimSpeaker('');
+            return;
+          }
+
           let interim = '';
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             const transcript = event.results[i][0].transcript;
