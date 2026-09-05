@@ -53,6 +53,8 @@ export const exportApi = {
     api.get(`/api/incidents/${incidentId}/export?format=markdown`),
   exportJson: (incidentId: string) =>
     api.get(`/api/incidents/${incidentId}/export?format=json`),
+  emailReport: (incidentId: string, data?: { recipient_email?: string; subject?: string; note?: string }) =>
+    api.post(`/api/incidents/${incidentId}/send-email`, data || {}),
 };
 
 export const agoraApi = {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { incidentsApi, API_BASE_URL } from '../api/client';
+import { incidentsApi, exportApi, API_BASE_URL } from '../api/client';
 import { Incident } from '../types';
 
 interface HeaderBarProps {
@@ -18,6 +18,13 @@ export function HeaderBar({ viewMode = 'dashboard', onToggleViewMode }: HeaderBa
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [title, setTitle] = useState('');
   const [channelName, setChannelName] = useState('');
+
+  // Email report state
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [emailNote, setEmailNote] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const loadIncidents = async () => {
     try {
@@ -74,6 +81,37 @@ export function HeaderBar({ viewMode = 'dashboard', onToggleViewMode }: HeaderBa
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to export:', error);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!currentIncident) return;
+    setSendingEmail(true);
+    setEmailStatus(null);
+    try {
+      const res = await exportApi.emailReport(currentIncident.id, {
+        recipient_email: recipientEmail.trim() || undefined,
+        note: emailNote.trim() || undefined,
+      });
+      setEmailStatus({
+        type: 'success',
+        message: res.data.message || `Email report dispatched to ${res.data.recipient}!`,
+      });
+      setTimeout(() => {
+        if (res.data.status === 'sent' || res.data.status === 'mock_sent') {
+          setShowEmailModal(false);
+          setEmailStatus(null);
+          setEmailNote('');
+        }
+      }, 2500);
+    } catch (error: any) {
+      console.error('Failed to send email:', error);
+      setEmailStatus({
+        type: 'error',
+        message: error.response?.data?.detail || 'Failed to dispatch email report.',
+      });
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -186,6 +224,13 @@ export function HeaderBar({ viewMode = 'dashboard', onToggleViewMode }: HeaderBa
               >
                 Export JSON
               </button>
+              <button
+                onClick={() => setShowEmailModal(true)}
+                className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs font-medium border border-slate-600 flex items-center gap-1"
+                title="Email post-mortem and digest to team"
+              >
+                <span>📧</span> Email
+              </button>
               {currentIncident.status === 'active' && (
                 <button
                   onClick={handleCloseIncident}
@@ -244,6 +289,91 @@ export function HeaderBar({ viewMode = 'dashboard', onToggleViewMode }: HeaderBa
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded text-sm font-semibold"
               >
                 Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Report Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>📧</span> Dispatch Incident Report
+              </h3>
+              <button
+                onClick={() => { setShowEmailModal(false); setEmailStatus(null); }}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-300">
+              Deliver a post-mortem summary, timeline, causal graph highlights, and action items directly to your inbox.
+            </p>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                Recipient Email (defaults to configured notification email)
+              </label>
+              <input
+                type="email"
+                placeholder="e.g. personal@gmail.com or sre-team@company.com"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                className="w-full bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500 text-sm placeholder-slate-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                Add Note or Executive Summary (Optional)
+              </label>
+              <textarea
+                rows={3}
+                placeholder="e.g. Mitigation verified in prod. SRE team conducting full review tomorrow at 10 AM."
+                value={emailNote}
+                onChange={(e) => setEmailNote(e.target.value)}
+                className="w-full bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500 text-sm placeholder-slate-400"
+              />
+            </div>
+
+            {emailStatus && (
+              <div
+                className={`text-xs p-3 rounded border ${
+                  emailStatus.type === 'success'
+                    ? 'bg-green-900/40 border-green-600 text-green-200'
+                    : 'bg-red-900/40 border-red-600 text-red-200'
+                }`}
+              >
+                {emailStatus.message}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => { setShowEmailModal(false); setEmailStatus(null); }}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendEmail}
+                disabled={sendingEmail}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded text-sm font-semibold flex items-center gap-1.5"
+              >
+                {sendingEmail ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <span>Send Report</span>
+                )}
               </button>
             </div>
           </div>

@@ -255,9 +255,20 @@ class QueryService:
         
         doc_data = self._get_document_context(db, incident_id)
         
-        system_prompt = """You are answering questions about an incident using ONLY the provided context.
-If the answer cannot be found in the context, say "I don't have enough information to answer that."
-Return JSON: {"answer": "...", "source_node_ids": [1,2,3]}"""
+        system_prompt = """You are SIGNAL, an expert AI Incident Commander answering questions about an active or historical production incident.
+Use the provided structured incident context (facts, hypotheses, decisions, actions, contradictions, timeline) to answer the user's question accurately, concisely, and authoritatively.
+
+Instructions:
+1. Ground your answer in the incident telemetry, observations, decisions, and action items.
+2. If asked about status, root cause, owners, ruled-out items, or timeline, synthesize the actual consensus.
+3. If the context does not contain enough information, explain what is missing rather than hallucinating.
+4. Keep spoken responses concise (2-3 sentences), direct, and actionable.
+
+Return ONLY raw JSON with:
+{
+  "answer": "Clear, grounded answer to the question",
+  "source_node_ids": [1, 2, 3]
+}"""
         
         try:
             response = httpx.post(
@@ -272,16 +283,20 @@ Return JSON: {"answer": "...", "source_node_ids": [1,2,3]}"""
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"Context: {json.dumps(doc_data)}\n\nQuestion: {text}"}
                     ],
-                    "temperature": 0,
+                    "temperature": 0.1,
                     "max_tokens": 300
                 },
                 timeout=8.0
             )
             response.raise_for_status()
             data = response.json()
-            content = data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"]["content"].strip()
             
-            result = json.loads(content.strip())
+            if content.startswith("```"):
+                lines = content.splitlines()
+                content = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+            
+            result = json.loads(content)
             answer = result.get("answer", "")
             node_ids = result.get("source_node_ids", [])
             

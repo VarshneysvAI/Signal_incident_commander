@@ -202,9 +202,24 @@ class StartAgentResponse(BaseModel):
     message: str
 
 
+class EmailReportRequest(BaseModel):
+    recipient_email: Optional[str] = None
+    subject: Optional[str] = None
+    note: Optional[str] = None
+
+
+class EmailReportResponse(BaseModel):
+    status: str
+    recipient: str
+    subject: str
+    mode: str
+    message: str
+
+
 class HealthResponse(BaseModel):
     status: str
     database: str
     llm: str
     agora: str
     slack: str
+    email: Optional[str] = "disabled"

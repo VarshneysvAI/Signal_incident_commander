@@ -35,3 +35,31 @@ def export_incident(
             media_type="application/json",
             headers={"Content-Disposition": f'attachment; filename="{incident_id}-incident.json"'}
         )
+
+
+@router.post("/incidents/{incident_id}/send-email", response_model=dict)
+def email_incident_report(
+    incident_id: str,
+    body: dict = None,
+    db: Session = Depends(get_db)
+):
+    """Email the incident executive report to the configured recipient."""
+    from ..services.email_service import email_service
+    
+    body = body or {}
+    recipient = body.get("recipient_email")
+    subject = body.get("subject")
+    note = body.get("note")
+    
+    result = email_service.send_incident_report(
+        db=db,
+        incident_id=incident_id,
+        recipient=recipient,
+        subject=subject,
+        note=note
+    )
+    
+    if result.get("status") == "error":
+        raise HTTPException(status_code=400, detail=result.get("message"))
+        
+    return result

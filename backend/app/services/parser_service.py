@@ -184,10 +184,18 @@ class ParserService:
     def parse(self, text: str, speaker: str) -> Dict[str, Any]:
         """
         Parse utterance and return structured result.
+        When LLM is configured, uses semantic open-world classification to handle any incident domain.
+        Falls back to deterministic regex patterns for zero-downtime offline reliability.
         """
         normalized = self.normalize(text)
         
-        # Try deterministic patterns
+        # 1. Primary: LLM semantic intelligence if credentials configured
+        if settings.llm_enabled:
+            llm_result = self._llm_classify(text, speaker)
+            if llm_result:
+                return llm_result
+        
+        # 2. Fallback: Fast deterministic patterns
         match_result = self.match_pattern(normalized)
         
         if match_result:
@@ -210,7 +218,7 @@ class ParserService:
             if negated:
                 label = f"[REJECTED] {normalized}"
             
-            result = {
+            return {
                 "utterance_type": ptype,
                 "topic": topic,
                 "negated": negated,
@@ -221,13 +229,9 @@ class ParserService:
                 "action_status": action_status,
                 "parser_method": "deterministic",
             }
-            
-            # Check if we should use LLM fallback for uncertain cases
-            # (Currently only if no pattern matched - could extend to low confidence)
-            return result
         
         # No pattern matched → uncertain
-        result = {
+        return {
             "utterance_type": "uncertain",
             "topic": "general",
             "negated": False,
@@ -238,30 +242,36 @@ class ParserService:
             "action_status": "unassigned",
             "parser_method": "deterministic",
         }
-        
-        # Try LLM fallback if configured
-        if settings.llm_enabled:
-            llm_result = self._llm_classify(text, speaker)
-            if llm_result:
-                result = llm_result
-        
-        return result
     
     def _llm_classify(self, text: str, speaker: str) -> Optional[Dict[str, Any]]:
-        """Classify utterance using LLM. Only called when deterministic parser fails."""
+        """
+        Classify utterance using LLM with open-world engineering domain extraction.
+        Handles arbitrary production incidents (Kubernetes, AWS/Cloud, Networking, Databases, Auth, Queues, etc.).
+        """
         import httpx
         import json
         
-        system_prompt = """You are an utterance classifier for incident management.
-Classify the utterance into exactly one type: fact, hypothesis, decision, action, question, off_topic.
-Return ONLY valid JSON with these fields:
-- utterance_type: one of fact|hypothesis|decision|action|question|off_topic
-- topic: one of db|cache|api|deployment|monitoring|payments|general
-- negated: boolean
-- confidence: high|medium|low
-- normalized_label: string (cleaned version of the utterance)
+        system_prompt = f"""You are SIGNAL, an expert Site Reliability Engineer and AI Incident Commander.
+Analyze the following war-room utterance spoken by "{speaker}" in an active production incident.
 
-Do not include any other text."""
+Determine the exact incident classification:
+1. "fact" - Confirmed observations, alert data, logs, metrics, telemetry, or verified reality (e.g. "504 gateway timeout on /checkout", "CPU at 98%", "pod CrashLoopBackOff", "disk /var is 100% full").
+2. "hypothesis" - Root-cause theories, suspected culprits, or speculative guesses (e.g. "I think the connection pool is exhausted", "could be bad BGP route", "maybe memory leak in worker").
+3. "decision" - Strategic consensus, architectural agreement, or chosen mitigation strategy (e.g. "let's failover to us-west-2", "we agreed to rollback deploy v2.4", "plan is to block that IP").
+4. "action" - A specific operational task being assigned, volunteered, or scheduled (e.g. "Sarah please bounce the ingress", "I will drain node 4", "who can check Datadog?").
+5. "question" - An inquiry requesting information or status (e.g. "what is the current error rate?", "who deployed this morning?").
+6. "off_topic" - Non-incident conversation, greetings, jokes, or idle chatter.
+
+Return ONLY raw JSON with these fields:
+{{
+  "utterance_type": "fact" | "hypothesis" | "decision" | "action" | "question" | "off_topic",
+  "topic": "<specific technical domain: e.g. kubernetes, database, networking, dns, auth, cache, deployment, payment, storage, monitoring, security, or general>",
+  "negated": <true if statement rules out, rejects, or refutes something (e.g. "DB is NOT the issue", "do NOT restart that"), else false>,
+  "confidence": "high" | "medium" | "low",
+  "normalized_label": "<crisp, professional summary statement suitable for a knowledge graph node>",
+  "proposed_owner": "<name of person volunteering or assigned for actions, else null>",
+  "action_status": "<committed if speaker says they will do it; pending_owner_confirmation if asking someone else; unassigned; or null>"
+}}"""
         
         try:
             response = httpx.post(
@@ -274,41 +284,47 @@ Do not include any other text."""
                     "model": settings.llm_model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Classify: {text}"}
+                        {"role": "user", "content": f"Speaker: {speaker}\nUtterance: {text}"}
                     ],
-                    "temperature": 0,
-                    "max_tokens": 150
+                    "temperature": 0.1,
+                    "max_tokens": 200
                 },
-                timeout=8.0
+                timeout=5.0
             )
             response.raise_for_status()
             data = response.json()
-            content = data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"]["content"].strip()
             
-            # Parse JSON response
-            llm_data = json.loads(content.strip())
+            # Remove markdown code block fences if present
+            if content.startswith("```"):
+                lines = content.splitlines()
+                content = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+            
+            llm_data = json.loads(content)
             
             # Validate required fields
             required = ["utterance_type", "topic", "negated", "confidence", "normalized_label"]
             if all(k in llm_data for k in required):
-                owner = None
-                action_status = "unassigned"
-                if llm_data["utterance_type"] == "action":
+                owner = llm_data.get("proposed_owner")
+                action_status = llm_data.get("action_status")
+                
+                # Fallback to regex owner extraction if LLM didn't catch owner
+                if llm_data["utterance_type"] == "action" and not owner:
                     owner, action_status = self.extract_owner(text, speaker)
                 
                 return {
                     "utterance_type": llm_data["utterance_type"],
-                    "topic": llm_data.get("topic", "general"),
-                    "negated": llm_data.get("negated", False),
-                    "confidence": llm_data.get("confidence", "low"),
+                    "topic": llm_data.get("topic", "general").lower(),
+                    "negated": bool(llm_data.get("negated", False)),
+                    "confidence": llm_data.get("confidence", "high"),
                     "normalized_label": llm_data["normalized_label"],
                     "polarity": None,
                     "proposed_owner": owner,
-                    "action_status": action_status,
+                    "action_status": action_status or "unassigned",
                     "parser_method": "llm",
                 }
-        except Exception:
-            pass  # Fall through to uncertain
+        except Exception as e:
+            pass  # Fall through to deterministic parser
         
         return None
 

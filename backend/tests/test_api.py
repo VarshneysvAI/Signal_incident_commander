@@ -215,3 +215,29 @@ def test_document_and_timeline_endpoints(client):
     assert len(timeline) == 3
     assert timeline[0]["speaker_name"] == "Alice"
 
+
+def test_email_report_endpoint(client):
+    """Test POST /api/incidents/{id}/send-email endpoint"""
+    inc_resp = client.post("/api/incidents", json={
+        "title": "Email Test Incident",
+        "channel_name": "inc-email"
+    })
+    incident_id = inc_resp.json()["id"]
+
+    # Post an utterance
+    client.post(f"/api/incidents/{incident_id}/utterances", json={
+        "speaker_name": "Alice",
+        "text": "We verified memory leak in billing worker"
+    })
+
+    # Trigger email report endpoint
+    email_resp = client.post(f"/api/incidents/{incident_id}/send-email", json={
+        "recipient_email": "engineer@company.internal",
+        "note": "Root cause identified by Alice"
+    })
+    assert email_resp.status_code == 200
+    data = email_resp.json()
+    assert data["status"] == "sent"
+    assert data["recipient"] == "engineer@company.internal"
+    assert "Incident Report" in data["subject"]
+

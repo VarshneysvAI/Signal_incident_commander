@@ -19,6 +19,11 @@ htmlcov/
 .env
 .env.local
 .env.*
+!.env.example
+
+# Scratch & Previews
+scratch/
+backend/scratch/
 
 # Node / Frontend
 node_modules/
