@@ -50,28 +50,15 @@ def agora_transcript_webhook(
     ):
         return {"status": "ignored", "reason": "echo_loop_agent_audio"}
     
-    # 2. Speaker Mapping: Map speaker_uid to human name
-    DEFAULT_SPEAKER_MAP = {
-        "1001": "Alice",
-        "1002": "Bob",
-        "1003": "Carol",
-        "1004": "Dave",
-        "alice": "Alice",
-        "bob": "Bob",
-        "carol": "Carol",
-        "dave": "Dave",
-    }
-    
+    # 2. Dynamic Speaker Identification (No static hardcoded names)
     custom_map = payload.get("speaker_map") or {}
-    if not speaker_name or speaker_name == "Unknown":
+    if not speaker_name or speaker_name.lower() in ["unknown", "user", "speaker"]:
         if speaker_uid_str in custom_map:
             speaker_name = custom_map[speaker_uid_str]
-        elif speaker_uid_str in DEFAULT_SPEAKER_MAP:
-            speaker_name = DEFAULT_SPEAKER_MAP[speaker_uid_str]
         elif speaker_uid:
             speaker_name = f"Speaker {speaker_uid}"
         else:
-            speaker_name = "Unknown"
+            speaker_name = "Speaker 1"
     
     # Dynamic in-speech speaker extraction (e.g. "Bob: connection pool exhausted" or "Sarah here: 504 timeouts")
     m = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s*[:\-]\s*(.+)", text.strip(), re.DOTALL)

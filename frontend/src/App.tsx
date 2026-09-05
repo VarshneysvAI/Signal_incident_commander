@@ -11,6 +11,7 @@ import { QueryBar } from './components/QueryBar';
 import { DebugDrawer } from './components/DebugDrawer';
 import { BridgePage } from './pages/BridgePage';
 import { RoomPage } from './pages/RoomPage';
+import { ResponderIntelPanel } from './components/ResponderIntelPanel';
 import { VoiceHUD } from './components/VoiceHUD';
 import { useVoiceCommander } from './hooks/useVoiceCommander';
 import { useAppStore } from './store';
@@ -101,6 +102,7 @@ function App() {
               <div className="bg-slate-800 border-b border-slate-700 px-3 py-2 flex items-center justify-between gap-1 overflow-x-auto flex-shrink-0">
                 <div className="flex items-center gap-1">
                   {[
+                    { id: 'intel', label: 'Responders', icon: '👤' },
                     { id: 'timeline', label: 'Timeline', icon: '⏱️' },
                     { id: 'actions', label: 'Actions', icon: '📋' },
                     { id: 'document', label: 'Document', icon: '📄' },
@@ -125,6 +127,7 @@ function App() {
 
               {/* Active Tab Panel */}
               <div className="flex-1 min-h-0 overflow-hidden">
+                {activeTab === 'intel' && <ResponderIntelPanel />}
                 {activeTab === 'timeline' && <TimelinePanel />}
                 {activeTab === 'actions' && <ActionsPanel />}
                 {activeTab === 'document' && <DocumentPanel />}

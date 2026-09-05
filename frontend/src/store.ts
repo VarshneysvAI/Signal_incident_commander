@@ -37,8 +37,8 @@ interface AppState {
   addEvent: (event: EventLog) => void;
   clearEvents: () => void;
 
-  activeTab: 'timeline' | 'actions' | 'document' | 'transcript' | 'radar';
-  setActiveTab: (tab: 'timeline' | 'actions' | 'document' | 'transcript' | 'radar') => void;
+  activeTab: 'timeline' | 'actions' | 'document' | 'transcript' | 'radar' | 'intel';
+  setActiveTab: (tab: 'timeline' | 'actions' | 'document' | 'transcript' | 'radar' | 'intel') => void;
   
   rightTab: 'radar' | 'actions';
   setRightTab: (tab: 'radar' | 'actions') => void;
