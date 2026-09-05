@@ -24,8 +24,15 @@ export function parseInSpeechSpeaker(
   currentSpeaker: SpeakerProfile,
   allProfiles: SpeakerProfile[]
 ): { text: string; speaker: SpeakerProfile } {
-  // Check for "Name: message" (e.g. "Bob: connection pool exhausted", "Sarah - high latency")
-  const m = rawText.match(/^([A-Za-z0-9_\-]{2,20})\s*[:\-]\s*(.+)/s);
+  // 1. Phonetic STT Typo Normalization (common browser speech-to-text mishearings)
+  let normalized = rawText
+    .replace(/\b(?:allies|a lies|ellis|elis)\b/gi, 'Alice')
+    .replace(/\b(?:bop)\b/gi, 'Bob')
+    .replace(/\b(?:carrel|carroll)\b/gi, 'Carol')
+    .replace(/\b(?:serah|sara)\b/gi, 'Sarah');
+
+  // 2. Check for "Name: message" (e.g. "Bob: connection pool exhausted", "Sarah - high latency")
+  const m = normalized.match(/^([A-Za-z0-9_\-]{2,20})\s*[:\-]\s*(.+)/s);
   if (m) {
     const cand = m[1].charAt(0).toUpperCase() + m[1].slice(1);
     if (!['Note', 'Fact', 'Hypothesis', 'Action', 'Alert', 'Error', 'Warning', 'Info', 'Step', 'Signal', 'Question', 'Http', 'Https'].includes(cand)) {
@@ -42,8 +49,8 @@ export function parseInSpeechSpeaker(
     }
   }
 
-  // Check for "This is Name: message" or "This is Name from SRE: message"
-  const m2 = rawText.match(/^(?:this is|i am)\s+([A-Za-z0-9_\-]{2,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,-]\s*(.+)/is);
+  // 3. Check for "Hello I am Name, message" or "Hi, this is Name: message" or "I'm Name: message"
+  const m2 = normalized.match(/^(?:hello\s+|hi\s+|hey\s+)?(?:this is|i am|i'm)\s+([A-Za-z0-9_\-]{2,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,\- ]\s*(.+)/is);
   if (m2) {
     const cand = m2[1].charAt(0).toUpperCase() + m2[1].slice(1);
     let existing = allProfiles.find((p) => p.name.toLowerCase() === cand.toLowerCase());

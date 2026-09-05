@@ -60,7 +60,13 @@ def agora_transcript_webhook(
         else:
             speaker_name = "Speaker 1"
     
-    # Dynamic in-speech speaker extraction (e.g. "Bob: connection pool exhausted" or "Sarah here: 504 timeouts")
+    # 1. Phonetic Normalization for common browser speech-to-text mishearings
+    text = re.sub(r"\b(?:allies|a lies|ellis|elis)\b", "Alice", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:bop)\b", "Bob", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:carrel|carroll)\b", "Carol", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:serah|sara)\b", "Sarah", text, flags=re.IGNORECASE)
+
+    # 2. Dynamic in-speech speaker extraction (e.g. "Bob: connection pool exhausted", "Hello I am Bob: ...", "Sarah here: ...")
     m = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s*[:\-]\s*(.+)", text.strip(), re.DOTALL)
     if m:
         cand = m.group(1).title()
@@ -68,7 +74,7 @@ def agora_transcript_webhook(
             speaker_name = cand
             text = m.group(2).strip()
     else:
-        m2 = re.match(r"^(?:this is|i am)\s+([A-Z][a-zA-Z0-9_\-]{1,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,-]\s*(.+)", text.strip(), re.IGNORECASE | re.DOTALL)
+        m2 = re.match(r"^(?:hello\s+|hi\s+|hey\s+)?(?:this is|i am|i'm)\s+([A-Z][a-zA-Z0-9_\-]{1,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,\- ]\s*(.+)", text.strip(), re.IGNORECASE | re.DOTALL)
         if m2:
             speaker_name = m2.group(1).title()
             text = m2.group(2).strip()

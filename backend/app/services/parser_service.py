@@ -45,19 +45,25 @@ class ParserService:
     ]
     
     ACTION_PATTERNS = [
-        r"(i|\w+) (will|can) (handle|take|fix|do|restart|investigate|check)",
+        r"(i|\w+) (will|can) (handle|take|fix|do|restart|investigate|check|work on)",
         r"assign(?:ed)?\s+(?:this\s+)?(?:to\s+)?(\w+)",
         r"(working on|looking into|investigating)",
-        r"\b(\w+)\s+please\s+(restart|handle|take|fix|do|check|investigate|rollback|run)",
-        r"\b(\w+)[,:]?\s*(?:can you|could you|please)\s+(?:go and\s+)?(check|see|investigate|restart|verify|look into|fix|rollback)",
-        r"(?:can you|could you|let's have someone)\s+(?:go and\s+)?(check|see|investigate|restart|verify|look into|fix|rollback)",
+        r"\b(\w+)\s+please\s+(restart|handle|take|fix|do|check|investigate|rollback|run|work on)",
+        r"\b(\w+)[,:]?\s*(?:can you|could you|please)\s+(?:go and\s+)?(check|see|investigate|restart|verify|look into|fix|rollback|work on)",
+        r"(?:can you|could you|let's have someone)\s+(?:go and\s+)?(check|see|investigate|restart|verify|look into|fix|rollback|work on)",
         r"(?:can we|can you)\s+(?:go and\s+)?(check|inspect|verify)\s+(out\s+)?(.+)",
+        r"\b(\w+)[,:]?\s*(?:your\s+)?task\s+is\s+to\s+(.+)",
+        r"\b(?:your\s+)?task\s+is\s+to\s+(.+)",
+        r"\b(\w+)[,:]?\s*(?:you\s+need\s+to|you\s+should|you\s+have\s+to)\s+(.+)",
+        r"\b(?:you\s+need\s+to|you\s+should|you\s+have\s+to)\s+(.+)",
     ]
     
     QUESTION_PATTERNS = [
         r"\?$",
         r"^(what|why|how|who|when|where) ",
         r"^(can|could) (we|you)",
+        r"\b(?:have you|did you|do you have|have we)\s+(?:done|checked|finished|restarted|verified|tested)\b",
+        r"\b(?:is it|are we|have we|do you know)\b",
     ]
     
     NEGATION_WORDS = [
@@ -160,6 +166,15 @@ class ParserService:
         if match:
             owner_candidate = match.group(1).title()
             if owner_candidate.lower() not in ['can', 'could', 'will', 'you', 'someone', 'all', 'hey', 'if']:
+                if owner_candidate.lower() == speaker.lower():
+                    return owner_candidate, "committed"
+                return owner_candidate, "pending_owner_confirmation"
+        
+        # "(\w+) your task is to ..." or "(\w+) you need to ..."
+        match = re.search(r'\b(\w+)[,:]?\s*(?:(?:your\s+)?task\s+is\s+to|you\s+need\s+to|you\s+should|you\s+have\s+to)\b', text_lower)
+        if match:
+            owner_candidate = match.group(1).title()
+            if owner_candidate.lower() not in ['can', 'could', 'will', 'you', 'someone', 'all', 'the', 'if', 'what', 'how', 'this', 'that']:
                 if owner_candidate.lower() == speaker.lower():
                     return owner_candidate, "committed"
                 return owner_candidate, "pending_owner_confirmation"
