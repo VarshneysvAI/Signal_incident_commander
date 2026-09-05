@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .db import engine, Base, get_db, SessionLocal
+from . import models
 from .api import health, incidents, utterances, graph, query, actions, export, agora, webhooks, events, followups, document
 from app.services.followup_service import start_followup_worker, stop_followup_worker
 
