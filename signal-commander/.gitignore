@@ -1,16 +1,33 @@
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
 venv/
 .venv/
+env/
+ENV/
 *.egg-info/
+
+# Environment
 .env
+.env.local
 .env.*
+
+# Dependencies & Build
 node_modules/
 dist/
 .next/
+build/
+
+# Database
 *.db
 *.sqlite3
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
 .vscode/
 .idea/
-.DS_Store
-*.log
