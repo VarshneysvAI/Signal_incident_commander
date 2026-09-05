@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     def slack_enabled(self) -> bool:
         return self.slack_webhook_url is not None and len(self.slack_webhook_url) > 0
     
+    # Follow-up Service
+    followup_scan_seconds: int = 60
+    followup_stale_minutes: int = 5
+    
+    # Audio Bridge (CR-1)
+    audio_bridge_enabled: bool = True
+    presenter_name: str = "Presenter"
+    
     class Config:
         env_file = ".env"
         case_sensitive = False
