@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { chaosApi, utterancesApi } from '../api/client';
 import { useAppStore } from '../store';
 
@@ -59,6 +59,8 @@ export function ChaosEngineModal({ isOpen, onClose, onAddResponder }: ChaosEngin
 
   if (!isOpen) return null;
 
+  const noIncident = !currentIncident;
+
   // Single turn injection
   const injectUtterance = async (speaker: string, text: string, idx?: number) => {
     if (!currentIncident) return;
@@ -78,15 +80,25 @@ export function ChaosEngineModal({ isOpen, onClose, onAddResponder }: ChaosEngin
 
   // Run Brutal Auto-Simulation across all utterances
   const runAutoSimulation = async () => {
-    if (!currentIncident || !currentScenario?.utterances || simulating) return;
+    if (!currentIncident) {
+      alert('No incident selected. Please create or select an incident from the Dashboard first.');
+      return;
+    }
+    const utteranceList = currentScenario?.utterances || currentScenario?.steps;
+    if (!utteranceList || utteranceList.length === 0 || simulating) return;
     setSimulating(true);
 
-    const utterances = currentScenario.utterances;
-    for (let i = 0; i < utterances.length; i++) {
+    for (let i = 0; i < utteranceList.length; i++) {
       setActiveStep(i);
-      const u = utterances[i];
-      await injectUtterance(u.speaker, u.text);
-      await new Promise((r) => setTimeout(r, 650));
+      const u = utteranceList[i];
+      try {
+        await injectUtterance(u.speaker, u.text);
+      } catch (err) {
+        console.error(`Failed to inject step ${i}:`, err);
+      }
+      // Use longer delay for wake-word queries so LLM has time to respond
+      const isWakeWord = u.text?.toLowerCase().includes('signal');
+      await new Promise((r) => setTimeout(r, isWakeWord ? 2500 : 1200));
     }
 
     setActiveStep(null);
@@ -122,6 +134,18 @@ export function ChaosEngineModal({ isOpen, onClose, onAddResponder }: ChaosEngin
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Warning: No Incident Selected */}
+          {noIncident && (
+            <div className="p-4 bg-amber-950/50 border border-amber-500/60 rounded-xl flex items-start gap-3 text-xs">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <p className="font-bold text-amber-200 text-sm">No Incident Selected</p>
+                <p className="text-amber-300 mt-1">
+                  You need an active incident to run the stress test. Go to the <strong>Dashboard</strong>, click <strong>"+New"</strong> to create an incident (e.g. "Payment Outage P0"), then come back here and launch the Brutal Test.
+                </p>
+              </div>
+            </div>
+          )}
           {/* Scenario Selection Grid */}
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
