@@ -46,14 +46,22 @@ export const RoomPage: React.FC = () => {
   // Simulation input
   const [simText, setSimText] = useState('');
   const [recentTranscripts, setRecentTranscripts] = useState<Array<{ id: string; speaker: string; text: string; time: string }>>([]);
+  const [interimTranscript, setInterimTranscript] = useState('');
 
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
   const volumeIntervalRef = useRef<any>(null);
+  const recognitionRef = useRef<any>(null);
+  const isListeningRef = useRef(false);
 
   const channelName = currentIncident?.channel_name || (currentIncident ? `incident-${currentIncident.id}` : 'signal-incident-room');
   const activeSpeakerName = useCustomSpeaker ? (customName || 'Presenter') : selectedSpeaker.name;
   const activeSpeakerUid = useCustomSpeaker ? (parseInt(customUid, 10) || 2001) : selectedSpeaker.uid;
+
+  const activeSpeakerNameRef = useRef(activeSpeakerName);
+  const activeSpeakerUidRef = useRef(activeSpeakerUid);
+  activeSpeakerNameRef.current = activeSpeakerName;
+  activeSpeakerUidRef.current = activeSpeakerUid;
 
   // Initialize client
   useEffect(() => {
@@ -123,17 +131,20 @@ export const RoomPage: React.FC = () => {
       // 4. Publish track
       await clientRef.current.publish([micTrack]);
       setPublishing(true);
-      setStatusMessage(`?? Connected and broadcasting as ${activeSpeakerName} (UID: ${activeSpeakerUid})`);
+      setStatusMessage(`🎙️ Connected and broadcasting as ${activeSpeakerName} (UID: ${activeSpeakerUid})`);
+      startSpeechRecognition();
     } catch (err: any) {
       console.error('Failed to join voice room:', err);
-      // Even if Agora cloud RTC fails due to dummy app credentials, provide graceful in-browser mode
+      // In-browser speech recognition works seamlessly even if Agora credentials are test keys
       setJoined(true);
-      setStatusMessage(`?? RTC Channel active in Web Audio mode: ${err.message || 'Connecting'}`);
+      startSpeechRecognition();
+      setStatusMessage(`🎙️ Live Voice Active (Browser STT Mode): ${err.message || 'Ready'}`);
     }
   };
 
   // Leave Agora Room
   const leaveRoom = async () => {
+    stopSpeechRecognition();
     try {
       if (localAudioTrackRef.current) {
         localAudioTrackRef.current.stop();
@@ -158,6 +169,79 @@ export const RoomPage: React.FC = () => {
     const nextMuted = !muted;
     await localAudioTrackRef.current.setEnabled(!nextMuted);
     setMuted(nextMuted);
+    if (nextMuted) {
+      stopSpeechRecognition();
+    } else {
+      startSpeechRecognition();
+    }
+  };
+
+  // Continuous speech recognition for microphone input
+  const startSpeechRecognition = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn('Web Speech API not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
+
+    try {
+      if (!recognitionRef.current) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event: any) => {
+          let interim = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              const finalTrimmed = transcript.trim();
+              if (finalTrimmed.length > 2) {
+                sendVoiceLine(finalTrimmed, activeSpeakerNameRef.current);
+              }
+              setInterimTranscript('');
+            } else {
+              interim += transcript;
+            }
+          }
+          if (interim) {
+            setInterimTranscript(interim);
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          if (event.error === 'no-speech') return;
+          console.warn('Speech recognition error:', event.error);
+        };
+
+        recognition.onend = () => {
+          if (isListeningRef.current) {
+            try {
+              recognition.start();
+            } catch (e) {}
+          }
+        };
+
+        recognitionRef.current = recognition;
+      }
+
+      isListeningRef.current = true;
+      recognitionRef.current.start();
+    } catch (e) {
+      console.warn('Failed to start SpeechRecognition:', e);
+    }
+  };
+
+  const stopSpeechRecognition = () => {
+    isListeningRef.current = false;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+    }
+    setInterimTranscript('');
   };
 
   // Start Cloud Transcription Agent
@@ -225,7 +309,7 @@ export const RoomPage: React.FC = () => {
         <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <span className="text-3xl">???</span>
+              <span className="text-3xl">🎙️</span>
               <div>
                 <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                   Agora Voice Room
@@ -250,7 +334,7 @@ export const RoomPage: React.FC = () => {
                   : 'bg-slate-700 text-slate-400 border-slate-600 hover:bg-slate-600'
               }`}
             >
-              <span>{ttsEnabled ? '??' : '??'}</span>
+              <span>{ttsEnabled ? '🔊' : '🔇'}</span>
               <span>{ttsEnabled ? 'TTS Spoken Audio Active' : 'TTS Audio Muted'}</span>
             </button>
 
@@ -372,7 +456,7 @@ export const RoomPage: React.FC = () => {
                     onClick={joinRoom}
                     className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm transition-colors shadow-lg flex items-center justify-center gap-2"
                   >
-                    <span>???</span> Join Agora Room & Publish Mic
+                    <span>🎙️</span> Join Agora Room & Publish Mic
                   </button>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
@@ -384,7 +468,7 @@ export const RoomPage: React.FC = () => {
                           : 'bg-slate-700 text-white border-slate-600 hover:bg-slate-600'
                       }`}
                     >
-                      {muted ? '?? Unmute Mic' : '??? Mute Mic'}
+                      {muted ? '🔊 Unmute Mic' : '🔇 Mute Mic'}
                     </button>
                     <button
                       onClick={leaveRoom}
@@ -399,7 +483,7 @@ export const RoomPage: React.FC = () => {
                   onClick={startAgent}
                   className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-medium border border-slate-600 flex items-center justify-center gap-1.5"
                 >
-                  <span>??</span> Register Cloud Transcription Agent
+                  <span>🤖</span> Register Cloud Transcription Agent
                 </button>
                 {agentStatus !== 'Not started' && (
                   <p className="text-[11px] text-slate-400 text-center">{agentStatus}</p>
@@ -414,6 +498,21 @@ export const RoomPage: React.FC = () => {
 
           {/* Right 2 Columns: Spoken Runbook & Real-Time Voice Activity Feed */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Live Real-Time Microphone Transcription Bubble */}
+            {interimTranscript && (
+              <div className="bg-emerald-950/80 border border-emerald-500/70 rounded-xl p-4 shadow-xl flex items-center gap-3 animate-pulse">
+                <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
+                <div className="flex-1">
+                  <span className="text-xs font-bold text-emerald-300">
+                    🎙️ {activeSpeakerName} speaking (Live Microphone Transcription):
+                  </span>
+                  <p className="text-sm text-white font-semibold italic mt-0.5">
+                    "{interimTranscript}..."
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Quick 1-Click Spoken Verification Ladder */}
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-lg">
               <div className="flex items-center justify-between mb-3">
@@ -443,7 +542,7 @@ export const RoomPage: React.FC = () => {
                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                           isWakeWord ? 'bg-purple-800 text-purple-200' : 'bg-slate-600 text-slate-300'
                         }`}>
-                          {isWakeWord ? '? Wake-Word Query' : `Step ${line.num}`}
+                          {isWakeWord ? '⚡ Wake-Word Query' : `Step ${line.num}`}
                         </span>
                       </div>
                       <p className="text-xs text-white leading-snug">"{line.text}"</p>
@@ -483,7 +582,7 @@ export const RoomPage: React.FC = () => {
                 <div className="p-4 bg-gradient-to-r from-blue-950/60 to-purple-950/60 border border-blue-500/50 rounded-xl space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-blue-300 font-semibold flex items-center gap-1.5">
-                      <span>?</span> Spoken Query Answered
+                      <span>⚡</span> Spoken Query Answered
                     </span>
                     <span className="text-[10px] bg-blue-800/60 text-blue-200 px-2 py-0.5 rounded">
                       Zero-Key TTS Audio Played

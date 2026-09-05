@@ -11,6 +11,8 @@ import { QueryBar } from './components/QueryBar';
 import { DebugDrawer } from './components/DebugDrawer';
 import { BridgePage } from './pages/BridgePage';
 import { RoomPage } from './pages/RoomPage';
+import { VoiceHUD } from './components/VoiceHUD';
+import { useVoiceCommander } from './hooks/useVoiceCommander';
 import { useAppStore } from './store';
 import { useEventStream } from './hooks/useEventStream';
 import { graphApi, documentApi, actionsApi } from './api/client';
@@ -25,12 +27,11 @@ function App() {
   
   const activeTab = useAppStore((state) => state.activeTab);
   const setActiveTab = useAppStore((state) => state.setActiveTab);
-  const rightTab = useAppStore((state) => state.rightTab);
-  const setRightTab = useAppStore((state) => state.setRightTab);
 
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'dashboard' | 'room' | 'bridge'>('dashboard');
 
+  const voiceCommander = useVoiceCommander(currentIncident?.id || null);
   useEventStream(currentIncident?.id || null);
 
   useEffect(() => {
@@ -65,11 +66,14 @@ function App() {
   }, [currentIncident?.id, setGraphData, setDocument, setTimeline, setActions, setGaps]);
 
   return (
-    <div className="h-screen flex flex-col bg-slate-900">
+    <div className="h-screen flex flex-col bg-slate-900 overflow-hidden">
       <HeaderBar viewMode={viewMode} onToggleViewMode={setViewMode} />
       
+      {/* Live Voice HUD - always visible on top for instant mic feedback and persona selection */}
+      <VoiceHUD voiceCommander={voiceCommander} />
+
       {loading && (
-        <div className="absolute top-16 left-0 right-0 bg-blue-600 text-white text-center py-2 z-50">
+        <div className="bg-blue-600 text-white text-center py-1.5 text-xs font-semibold z-50">
           Loading incident data...
         </div>
       )}
@@ -82,86 +86,56 @@ function App() {
         </div>
       ) : (
         <>
-          <ContradictionBanner />
-          <div className="flex-1 flex overflow-hidden p-4 gap-4">
-            <div className="w-[45%] flex flex-col">
-              <KnowledgeGraph />
+          <div className="flex-1 flex overflow-hidden p-3 gap-3 min-h-0">
+            {/* Left Column: Causal Knowledge Graph & Contradiction Alert (58% width) */}
+            <div className="w-[58%] flex flex-col gap-2 min-w-0 h-full">
+              <ContradictionBanner />
+              <div className="flex-1 min-h-0 bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
+                <KnowledgeGraph />
+              </div>
             </div>
 
-        <div className="w-[30%] flex flex-col">
-          <div className="bg-slate-800 rounded-t-lg border border-slate-700 px-4 py-2 flex gap-4">
-            <button
-              onClick={() => setActiveTab('document')}
-              className={`text-sm font-medium pb-2 border-b-2 ${
-                activeTab === 'document'
-                  ? 'text-white border-blue-500'
-                  : 'text-slate-400 border-transparent hover:text-white'
-              }`}
-            >
-              Document
-            </button>
-            <button
-              onClick={() => setActiveTab('timeline')}
-              className={`text-sm font-medium pb-2 border-b-2 ${
-                activeTab === 'timeline'
-                  ? 'text-white border-blue-500'
-                  : 'text-slate-400 border-transparent hover:text-white'
-              }`}
-            >
-              Timeline
-            </button>
-            <button
-              onClick={() => setActiveTab('transcript')}
-              className={`text-sm font-medium pb-2 border-b-2 ${
-                activeTab === 'transcript'
-                  ? 'text-white border-blue-500'
-                  : 'text-slate-400 border-transparent hover:text-white'
-              }`}
-            >
-              Transcript
-            </button>
-          </div>
-          
-          <div className="flex-1 overflow-hidden">
-            {activeTab === 'document' && <DocumentPanel />}
-            {activeTab === 'timeline' && <TimelinePanel />}
-            {activeTab === 'transcript' && <TranscriptPanel />}
-          </div>
-        </div>
+            {/* Right Column: Unified Incident Management Console (42% width) */}
+            <div className="w-[42%] flex flex-col min-w-0 h-full bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
+              {/* Tab Navigation Strip */}
+              <div className="bg-slate-800 border-b border-slate-700 px-3 py-2 flex items-center justify-between gap-1 overflow-x-auto flex-shrink-0">
+                <div className="flex items-center gap-1">
+                  {[
+                    { id: 'timeline', label: 'Timeline', icon: '⏱️' },
+                    { id: 'actions', label: 'Actions', icon: '📋' },
+                    { id: 'document', label: 'Document', icon: '📄' },
+                    { id: 'transcript', label: 'Transcript', icon: '💬' },
+                    { id: 'radar', label: 'Gap Radar', icon: '🎯' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                        activeTab === tab.id
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-700/60'
+                      }`}
+                    >
+                      <span>{tab.icon}</span>
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-        <div className="w-[25%] flex flex-col">
-          <div className="bg-slate-800 rounded-t-lg border border-slate-700 px-4 py-2 flex gap-4">
-            <button
-              onClick={() => setRightTab('radar')}
-              className={`text-sm font-medium pb-2 border-b-2 ${
-                rightTab === 'radar'
-                  ? 'text-white border-blue-500'
-                  : 'text-slate-400 border-transparent hover:text-white'
-              }`}
-            >
-              Gap Radar
-            </button>
-            <button
-              onClick={() => setRightTab('actions')}
-              className={`text-sm font-medium pb-2 border-b-2 ${
-                rightTab === 'actions'
-                  ? 'text-white border-blue-500'
-                  : 'text-slate-400 border-transparent hover:text-white'
-              }`}
-            >
-              Actions
-            </button>
+              {/* Active Tab Panel */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {activeTab === 'timeline' && <TimelinePanel />}
+                {activeTab === 'actions' && <ActionsPanel />}
+                {activeTab === 'document' && <DocumentPanel />}
+                {activeTab === 'transcript' && <TranscriptPanel />}
+                {activeTab === 'radar' && <GapRadar />}
+              </div>
+            </div>
           </div>
-          
-          <div className="flex-1 overflow-hidden">
-            {rightTab === 'radar' && <GapRadar />}
-            {rightTab === 'actions' && <ActionsPanel />}
-          </div>
-        </div>
-      </div>
 
-      <QueryBar />
-      <DebugDrawer />
+          <QueryBar />
+          <DebugDrawer />
         </>
       )}
     </div>

@@ -37,9 +37,8 @@ interface AppState {
   addEvent: (event: EventLog) => void;
   clearEvents: () => void;
 
-  // UI state
-  activeTab: 'document' | 'timeline' | 'transcript';
-  setActiveTab: (tab: 'document' | 'timeline' | 'transcript') => void;
+  activeTab: 'timeline' | 'actions' | 'document' | 'transcript' | 'radar';
+  setActiveTab: (tab: 'timeline' | 'actions' | 'document' | 'transcript' | 'radar') => void;
   
   rightTab: 'radar' | 'actions';
   setRightTab: (tab: 'radar' | 'actions') => void;
@@ -134,7 +133,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearEvents: () => set({ events: [] }),
 
   // UI state
-  activeTab: 'document',
+  activeTab: 'timeline',
   setActiveTab: (tab) => set({ activeTab: tab }),
   
   rightTab: 'radar',
