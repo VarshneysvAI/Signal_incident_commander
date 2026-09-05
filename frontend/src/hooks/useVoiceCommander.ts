@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../store';
 import { utterancesApi, apiClient } from '../api/client';
 import AgoraRTC, { IAgoraRTCClient, IMicrophoneAudioTrack } from 'agora-rtc-sdk-ng';
@@ -15,9 +15,70 @@ export const SPEAKER_PROFILES: SpeakerProfile[] = [
   { name: 'Bob', uid: 1002, role: 'Backend / DB Engineer', avatar: '👨‍💻' },
   { name: 'Carol', uid: 1003, role: 'Infrastructure / DevOps', avatar: '👩‍🔧' },
   { name: 'Dave', uid: 1004, role: 'Engineering Manager', avatar: '👨‍💼' },
+  { name: 'Sarah', uid: 1005, role: 'Payment Gateway SRE', avatar: '👩‍💻' },
+  { name: 'Vikram', uid: 1006, role: 'Principal Architect', avatar: '👨‍🔬' },
 ];
 
+export function parseInSpeechSpeaker(
+  rawText: string,
+  currentSpeaker: SpeakerProfile,
+  allProfiles: SpeakerProfile[]
+): { text: string; speaker: SpeakerProfile } {
+  // Check for "Name: message" (e.g. "Bob: connection pool exhausted", "Sarah - high latency")
+  const m = rawText.match(/^([A-Za-z0-9_\-]{2,20})\s*[:\-]\s*(.+)/s);
+  if (m) {
+    const cand = m[1].charAt(0).toUpperCase() + m[1].slice(1);
+    if (!['Note', 'Fact', 'Hypothesis', 'Action', 'Alert', 'Error', 'Warning', 'Info', 'Step', 'Signal', 'Question', 'Http', 'Https'].includes(cand)) {
+      let existing = allProfiles.find((p) => p.name.toLowerCase() === cand.toLowerCase());
+      if (!existing) {
+        existing = {
+          name: cand,
+          uid: Math.floor(1000 + Math.random() * 8999),
+          role: 'Incident Responder',
+          avatar: '👤',
+        };
+      }
+      return { text: m[2].trim(), speaker: existing };
+    }
+  }
+
+  // Check for "This is Name: message" or "This is Name from SRE: message"
+  const m2 = rawText.match(/^(?:this is|i am)\s+([A-Za-z0-9_\-]{2,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,-]\s*(.+)/is);
+  if (m2) {
+    const cand = m2[1].charAt(0).toUpperCase() + m2[1].slice(1);
+    let existing = allProfiles.find((p) => p.name.toLowerCase() === cand.toLowerCase());
+    if (!existing) {
+      existing = {
+        name: cand,
+        uid: Math.floor(1000 + Math.random() * 8999),
+        role: 'Incident Responder',
+        avatar: '👤',
+      };
+    }
+    return { text: m2[2].trim(), speaker: existing };
+  }
+
+  // Check for "Name here: message"
+  const m3 = rawText.match(/^([A-Za-z0-9_\-]{2,20})\s+here\s*[:,-]\s*(.+)/is);
+  if (m3) {
+    const cand = m3[1].charAt(0).toUpperCase() + m3[1].slice(1);
+    let existing = allProfiles.find((p) => p.name.toLowerCase() === cand.toLowerCase());
+    if (!existing) {
+      existing = {
+        name: cand,
+        uid: Math.floor(1000 + Math.random() * 8999),
+        role: 'Incident Responder',
+        avatar: '👤',
+      };
+    }
+    return { text: m3[2].trim(), speaker: existing };
+  }
+
+  return { text: rawText, speaker: currentSpeaker };
+}
+
 export function useVoiceCommander(incidentId: string | null) {
+  const [responders, setResponders] = useState<SpeakerProfile[]>(SPEAKER_PROFILES);
   const [isListening, setIsListening] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [recentSpoken, setRecentSpoken] = useState<Array<{ text: string; speaker: string; time: string }>>([]);
@@ -33,11 +94,22 @@ export function useVoiceCommander(incidentId: string | null) {
   const volumeIntervalRef = useRef<any>(null);
   const isListeningRef = useRef(false);
   const selectedSpeakerRef = useRef(selectedSpeaker);
+  const respondersRef = useRef(responders);
   const incidentIdRef = useRef(incidentId);
 
+  respondersRef.current = responders;
   selectedSpeakerRef.current = selectedSpeaker;
   incidentIdRef.current = incidentId;
   isListeningRef.current = isListening;
+
+  const addResponder = useCallback((profile: SpeakerProfile) => {
+    setResponders((prev) => {
+      if (prev.some((p) => p.name.toLowerCase() === profile.name.toLowerCase())) {
+        return prev;
+      }
+      return [...prev, profile];
+    });
+  }, []);
 
   // Check Web Speech API support
   useEffect(() => {
@@ -91,7 +163,11 @@ export function useVoiceCommander(incidentId: string | null) {
         if (event.results[i].isFinal) {
           const finalTrimmed = transcript.trim();
           if (finalTrimmed.length > 2) {
-            dispatchUtterance(finalTrimmed, selectedSpeakerRef.current.name);
+            const parsed = parseInSpeechSpeaker(finalTrimmed, selectedSpeakerRef.current, respondersRef.current);
+            if (!respondersRef.current.some((p) => p.name.toLowerCase() === parsed.speaker.name.toLowerCase())) {
+              addResponder(parsed.speaker);
+            }
+            dispatchUtterance(parsed.text, parsed.speaker.name);
           }
           setInterimTranscript('');
         } else {
@@ -99,7 +175,8 @@ export function useVoiceCommander(incidentId: string | null) {
         }
       }
       if (interim) {
-        setInterimTranscript(interim);
+        const parsed = parseInSpeechSpeaker(interim, selectedSpeakerRef.current, respondersRef.current);
+        setInterimTranscript(`${parsed.speaker.avatar} ${parsed.speaker.name}: "${parsed.text}"`);
       }
     };
 
@@ -237,6 +314,8 @@ export function useVoiceCommander(incidentId: string | null) {
   }, []);
 
   return {
+    responders,
+    addResponder,
     isListening,
     interimTranscript,
     recentSpoken,

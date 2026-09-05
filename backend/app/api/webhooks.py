@@ -73,6 +73,24 @@ def agora_transcript_webhook(
         else:
             speaker_name = "Unknown"
     
+    # Dynamic in-speech speaker extraction (e.g. "Bob: connection pool exhausted" or "Sarah here: 504 timeouts")
+    m = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s*[:\-]\s*(.+)", text.strip(), re.DOTALL)
+    if m:
+        cand = m.group(1).title()
+        if cand.lower() not in ["note", "fact", "hypothesis", "action", "alert", "error", "warning", "info", "step", "signal", "question", "http", "https"]:
+            speaker_name = cand
+            text = m.group(2).strip()
+    else:
+        m2 = re.match(r"^(?:this is|i am)\s+([A-Z][a-zA-Z0-9_\-]{1,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,-]\s*(.+)", text.strip(), re.IGNORECASE | re.DOTALL)
+        if m2:
+            speaker_name = m2.group(1).title()
+            text = m2.group(2).strip()
+        else:
+            m3 = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s+here\s*[:,-]\s*(.+)", text.strip(), re.IGNORECASE | re.DOTALL)
+            if m3:
+                speaker_name = m3.group(1).title()
+                text = m3.group(2).strip()
+    
     # Dedup by event_id
     from ..models import Utterance
     existing = db.query(Utterance).filter(Utterance.event_id == event_id).first()

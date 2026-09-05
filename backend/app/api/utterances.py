@@ -22,20 +22,41 @@ def create_utterance(
         raise HTTPException(status_code=404, detail="Incident not found")
     
     import re
+    raw_text = utterance.text.strip()
+    speaker_name = utterance.speaker_name or "Unknown"
+
+    # Dynamic in-speech speaker extraction (e.g. "Bob: connection pool exhausted" or "Sarah here: 504 timeouts")
+    m = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s*[:\-]\s*(.+)", raw_text, re.DOTALL)
+    if m:
+        cand = m.group(1).title()
+        if cand.lower() not in ["note", "fact", "hypothesis", "action", "alert", "error", "warning", "info", "step", "signal", "question", "http", "https"]:
+            speaker_name = cand
+            raw_text = m.group(2).strip()
+    else:
+        m2 = re.match(r"^(?:this is|i am)\s+([A-Z][a-zA-Z0-9_\-]{1,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,-]\s*(.+)", raw_text, re.IGNORECASE | re.DOTALL)
+        if m2:
+            speaker_name = m2.group(1).title()
+            raw_text = m2.group(2).strip()
+        else:
+            m3 = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s+here\s*[:,-]\s*(.+)", raw_text, re.IGNORECASE | re.DOTALL)
+            if m3:
+                speaker_name = m3.group(1).title()
+                raw_text = m3.group(2).strip()
+
     # Check for wake word: "Signal, ..." or "Hey Signal, ..."
-    wake_match = re.match(r"^(?:hey\s+)?signal[,:]?\s*(.*)", utterance.text.strip(), re.IGNORECASE)
+    wake_match = re.match(r"^(?:hey\s+)?signal[,:]?\s*(.*)", raw_text, re.IGNORECASE)
     if wake_match:
         from ..services.query_service import query_service
         query_text = wake_match.group(1).strip()
         if not query_text:
-            query_text = utterance.text.strip()
+            query_text = raw_text
             
-        result = query_service.answer_query(db, incident_id, query_text, utterance.speaker_name)
+        result = query_service.answer_query(db, incident_id, query_text, speaker_name)
         
         db_utterance = Utterance(
             incident_id=incident_id,
-            speaker_name=utterance.speaker_name,
-            text=utterance.text,
+            speaker_name=speaker_name,
+            text=raw_text,
             normalized_text=query_text,
             parser_type="query",
             parser_method=ParserMethod.deterministic,
@@ -70,13 +91,13 @@ def create_utterance(
         return db_utterance
     
     # Parse utterance
-    parsed = parser_service.parse(utterance.text, utterance.speaker_name)
+    parsed = parser_service.parse(raw_text, speaker_name)
     
     # Create utterance record
     db_utterance = Utterance(
         incident_id=incident_id,
-        speaker_name=utterance.speaker_name,
-        text=utterance.text,
+        speaker_name=speaker_name,
+        text=raw_text,
         normalized_text=parsed.get("normalized_label"),
         parser_type=parsed.get("utterance_type"),
         parser_method=ParserMethod[parsed.get("parser_method", "deterministic")],
@@ -93,8 +114,8 @@ def create_utterance(
         incident_id=incident_id,
         event_type="utterance_received",
         payload_json={
-            "speaker": utterance.speaker_name,
-            "text": utterance.text,
+            "speaker": speaker_name,
+            "text": raw_text,
             "parsed_type": parsed.get("utterance_type")
         }
     )

@@ -29,6 +29,9 @@ class ParserService:
         r"my theory is",
         r"i suspect",
         r"seems like",
+        r"there is something happening in",
+        r"something (is|seems|might be) (wrong|failing|broken|happening) with",
+        r"looks like (the|a) \w+ is",
         r"is (the issue|the problem|failing|broken|down)",
         r"\w+ (is|are) (the issue|the problem|failing|broken|down)",
     ]
@@ -42,10 +45,13 @@ class ParserService:
     ]
     
     ACTION_PATTERNS = [
-        r"(i|\w+) (will|can) (handle|take|fix|do)",
+        r"(i|\w+) (will|can) (handle|take|fix|do|restart|investigate|check)",
         r"assign(?:ed)?\s+(?:this\s+)?(?:to\s+)?(\w+)",
         r"(working on|looking into|investigating)",
         r"\b(\w+)\s+please\s+(restart|handle|take|fix|do|check|investigate|rollback|run)",
+        r"\b(\w+)[,:]?\s*(?:can you|could you|please)\s+(?:go and\s+)?(check|see|investigate|restart|verify|look into|fix|rollback)",
+        r"(?:can you|could you|let's have someone)\s+(?:go and\s+)?(check|see|investigate|restart|verify|look into|fix|rollback)",
+        r"(?:can we|can you)\s+(?:go and\s+)?(check|inspect|verify)\s+(out\s+)?(.+)",
     ]
     
     QUESTION_PATTERNS = [
@@ -149,27 +155,34 @@ class ParserService:
                 return owner_candidate, "committed"
             return owner_candidate, "pending_owner_confirmation"
         
-        # "(\w+) please (restart|handle|fix|...)"
-        match = re.search(r'\b(\w+)\s+please\b', text_lower)
+        # "(\w+) please (restart|handle|fix|...)" or "(\w+) can you (check|see|...)"
+        match = re.search(r'\b(\w+)[,:]?\s*(?:please|can you|could you)\b', text_lower)
         if match:
             owner_candidate = match.group(1).title()
-            if owner_candidate.lower() not in ['can', 'could', 'will', 'you', 'someone', 'all']:
+            if owner_candidate.lower() not in ['can', 'could', 'will', 'you', 'someone', 'all', 'hey', 'if']:
                 if owner_candidate.lower() == speaker.lower():
                     return owner_candidate, "committed"
+                return owner_candidate, "pending_owner_confirmation"
+        
+        # "see (\w+) that what was happening" / "ask (\w+) to check"
+        match = re.search(r'\b(?:ask|tell|have|see)\s+(\w+)\b', text_lower)
+        if match:
+            owner_candidate = match.group(1).title()
+            if owner_candidate.lower() not in ['can', 'could', 'will', 'you', 'someone', 'all', 'the', 'if', 'what', 'how']:
                 return owner_candidate, "pending_owner_confirmation"
         
         return None, "unassigned"
     
     def match_pattern(self, text: str) -> Optional[Tuple[str, str, int, int]]:
         """
-        Match deterministic patterns in order: fact, hypothesis, decision, action, question.
+        Match deterministic patterns in order: fact, action, decision, hypothesis, question.
         Returns (type, pattern, match_start, match_end) or None.
         """
         patterns = [
             ("fact", self.FACT_PATTERNS),
-            ("hypothesis", self.HYPOTHESIS_PATTERNS),
-            ("decision", self.DECISION_PATTERNS),
             ("action", self.ACTION_PATTERNS),
+            ("decision", self.DECISION_PATTERNS),
+            ("hypothesis", self.HYPOTHESIS_PATTERNS),
             ("question", self.QUESTION_PATTERNS),
         ]
         

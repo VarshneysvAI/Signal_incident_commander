@@ -75,5 +75,11 @@ export const eventsApi = {
   getEventStream: (incidentId: string) => `${API_BASE_URL}/api/incidents/${incidentId}/events`,
 };
 
+export const chaosApi = {
+  listScenarios: () => api.get('/api/incidents-meta/scenarios'),
+  generateScenario: (incidentId: string, data?: { scenario_id?: string; prompt?: string }) =>
+    api.post(`/api/incidents/${incidentId}/chaos-generate`, data || {}),
+};
+
 export const apiClient = api;
 export default api;

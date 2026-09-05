@@ -95,3 +95,32 @@ def delete_incident(incident_id: str, db: Session = Depends(get_db)):
 def list_incidents(db: Session = Depends(get_db)):
     incidents = db.query(Incident).order_by(Incident.started_at.desc()).all()
     return incidents
+
+
+@router.get("/incidents-meta/scenarios")
+def list_chaos_scenarios():
+    from ..services.chaos_service import chaos_service
+    return chaos_service.list_scenarios()
+
+
+@router.post("/incidents/{incident_id}/chaos-generate")
+def generate_chaos_incident(
+    incident_id: str,
+    payload: dict = None,
+    db: Session = Depends(get_db)
+):
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    from ..services.chaos_service import chaos_service
+    payload = payload or {}
+    scenario_id = payload.get("scenario_id")
+    prompt_hint = payload.get("prompt")
+
+    if scenario_id and scenario_id != "ai_generated":
+        scenario = chaos_service.get_scenario(scenario_id)
+        if scenario:
+            return scenario
+
+    return chaos_service.generate_ai_scenario(incident.title, prompt_hint)
