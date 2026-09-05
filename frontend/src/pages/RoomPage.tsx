@@ -7,17 +7,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import AgoraRTC, { IAgoraRTCClient, IMicrophoneAudioTrack } from 'agora-rtc-sdk-ng';
 import { useAppStore } from '../store';
 import { apiClient, chaosApi } from '../api/client';
-import { parseInSpeechSpeaker, SpeakerProfile } from '../hooks/useVoiceCommander';
+import { parseInSpeechSpeaker, SpeakerProfile, INITIAL_RESPONDER } from '../hooks/useVoiceCommander';
 import { ChaosEngineModal } from '../components/ChaosEngineModal';
-
-export const PRESET_SPEAKERS: SpeakerProfile[] = [
-  { name: 'Alice', uid: 1001, role: 'Incident Commander / SRE Lead', avatar: '👩‍💼' },
-  { name: 'Bob', uid: 1002, role: 'Backend / DB Engineer', avatar: '👨‍💻' },
-  { name: 'Carol', uid: 1003, role: 'Infrastructure / DevOps', avatar: '👩‍🔧' },
-  { name: 'Dave', uid: 1004, role: 'Engineering Manager', avatar: '👨‍💼' },
-  { name: 'Sarah', uid: 1005, role: 'Payment Gateway SRE', avatar: '👩‍💻' },
-  { name: 'Vikram', uid: 1006, role: 'Principal Architect', avatar: '👨‍🔬' },
-];
 
 export const RoomPage: React.FC = () => {
   const currentIncident = useAppStore((state) => state.currentIncident);
@@ -26,9 +17,9 @@ export const RoomPage: React.FC = () => {
   const isSpeaking = useAppStore((state) => state.isSpeaking);
   const lastQueryResult = useAppStore((state) => state.lastQueryResult);
 
-  // Dynamic responders
-  const [responders, setResponders] = useState<SpeakerProfile[]>(PRESET_SPEAKERS);
-  const [selectedSpeaker, setSelectedSpeaker] = useState<SpeakerProfile>(PRESET_SPEAKERS[0]);
+  // 100% Dynamic responders: begins with Lead and auto-populates as voices speak
+  const [responders, setResponders] = useState<SpeakerProfile[]>([INITIAL_RESPONDER]);
+  const [selectedSpeaker, setSelectedSpeaker] = useState<SpeakerProfile>(INITIAL_RESPONDER);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showChaosModal, setShowChaosModal] = useState(false);
   const [newName, setNewName] = useState('');

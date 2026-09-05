@@ -10,14 +10,12 @@ export interface SpeakerProfile {
   avatar: string;
 }
 
-export const SPEAKER_PROFILES: SpeakerProfile[] = [
-  { name: 'Alice', uid: 1001, role: 'Incident Commander / SRE Lead', avatar: '👩‍💼' },
-  { name: 'Bob', uid: 1002, role: 'Backend / DB Engineer', avatar: '👨‍💻' },
-  { name: 'Carol', uid: 1003, role: 'Infrastructure / DevOps', avatar: '👩‍🔧' },
-  { name: 'Dave', uid: 1004, role: 'Engineering Manager', avatar: '👨‍💼' },
-  { name: 'Sarah', uid: 1005, role: 'Payment Gateway SRE', avatar: '👩‍💻' },
-  { name: 'Vikram', uid: 1006, role: 'Principal Architect', avatar: '👨‍🔬' },
-];
+export const INITIAL_RESPONDER: SpeakerProfile = {
+  name: 'Commander',
+  uid: 1001,
+  role: 'Incident Lead',
+  avatar: '🧑‍💼',
+};
 
 export function parseInSpeechSpeaker(
   rawText: string,
@@ -85,11 +83,11 @@ export function parseInSpeechSpeaker(
 }
 
 export function useVoiceCommander(incidentId: string | null) {
-  const [responders, setResponders] = useState<SpeakerProfile[]>(SPEAKER_PROFILES);
+  const [responders, setResponders] = useState<SpeakerProfile[]>([INITIAL_RESPONDER]);
   const [isListening, setIsListening] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [recentSpoken, setRecentSpoken] = useState<Array<{ text: string; speaker: string; time: string }>>([]);
-  const [selectedSpeaker, setSelectedSpeaker] = useState<SpeakerProfile>(SPEAKER_PROFILES[0]);
+  const [selectedSpeaker, setSelectedSpeaker] = useState<SpeakerProfile>(INITIAL_RESPONDER);
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [speechSupported, setSpeechSupported] = useState(true);
   const [agoraConnected, setAgoraConnected] = useState(false);
