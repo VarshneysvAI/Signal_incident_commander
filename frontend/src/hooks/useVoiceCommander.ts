@@ -17,6 +17,16 @@ export const INITIAL_RESPONDER: SpeakerProfile = {
   avatar: '🧑‍💼',
 };
 
+export function getAvatarForName(name: string): string {
+  const avatars = ['🧑‍💻', '👩‍💻', '👨‍💻', '👩‍🔬', '👨‍🔬', '🧑‍🚀', '👩‍💼', '👨‍💼', '🧑‍🔧', '👩‍🔧', '🧙‍♂️', '🦸‍♀️'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash << 5) - hash + name.charCodeAt(i);
+    hash |= 0;
+  }
+  return avatars[Math.abs(hash) % avatars.length];
+}
+
 export function parseInSpeechSpeaker(
   rawText: string,
   currentSpeaker: SpeakerProfile,
@@ -27,56 +37,76 @@ export function parseInSpeechSpeaker(
     .replace(/\b(?:allies|a lies|ellis|elis)\b/gi, 'Alice')
     .replace(/\b(?:bop)\b/gi, 'Bob')
     .replace(/\b(?:carrel|carroll)\b/gi, 'Carol')
-    .replace(/\b(?:serah|sara)\b/gi, 'Sarah');
+    .replace(/\b(?:serah|sara)\b/gi, 'Sarah')
+    .replace(/\b(?:deve|dav)\b/gi, 'Dave');
 
-  // 2. Check for "Name: message" (e.g. "Bob: connection pool exhausted", "Sarah - high latency")
-  const m = normalized.match(/^([A-Za-z0-9_\-]{2,20})\s*[:\-]\s*(.+)/s);
-  if (m) {
-    const cand = m[1].charAt(0).toUpperCase() + m[1].slice(1);
-    if (!['Note', 'Fact', 'Hypothesis', 'Action', 'Alert', 'Error', 'Warning', 'Info', 'Step', 'Signal', 'Question', 'Http', 'Https'].includes(cand)) {
-      let existing = allProfiles.find((p) => p.name.toLowerCase() === cand.toLowerCase());
-      if (!existing) {
-        existing = {
-          name: cand,
-          uid: Math.floor(1000 + Math.random() * 8999),
-          role: 'Incident Responder',
-          avatar: '👤',
-        };
-      }
-      return { text: m[2].trim(), speaker: existing };
+  const reservedWords = new Set([
+    'note', 'fact', 'hypothesis', 'action', 'alert', 'error', 'warning', 'info',
+    'step', 'signal', 'question', 'http', 'https', 'we', 'they', 'team', 'service',
+    'database', 'redis', 'postgres', 'server', 'system', 'latency', 'pod', 'cluster',
+    'status', 'update', 'incident', 'issue', 'problem', 'fix', 'task', 'logs', 'metrics'
+  ]);
+
+  const makeProfile = (name: string, role = 'Incident Responder'): SpeakerProfile => {
+    const cleanName = name.trim().charAt(0).toUpperCase() + name.trim().slice(1);
+    const existing = allProfiles.find((p) => p.name.toLowerCase() === cleanName.toLowerCase());
+    if (existing) return existing;
+    return {
+      name: cleanName,
+      uid: Math.floor(1000 + Math.random() * 8999),
+      role: role,
+      avatar: getAvatarForName(cleanName),
+    };
+  };
+
+  // Pattern 1: "Name: message" or "Name - message"
+  const m1 = normalized.match(/^([A-Za-z0-9_\-]{2,20})\s*[:\-]\s*(.+)/s);
+  if (m1) {
+    const cand = m1[1].trim();
+    if (!reservedWords.has(cand.toLowerCase())) {
+      return { text: m1[2].trim(), speaker: makeProfile(cand) };
     }
   }
 
-  // 3. Check for "Hello I am Name, message" or "Hi, this is Name: message" or "I'm Name: message"
-  const m2 = normalized.match(/^(?:hello\s+|hi\s+|hey\s+)?(?:this is|i am|i'm)\s+([A-Za-z0-9_\-]{2,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,\- ]\s*(.+)/is);
+  // Pattern 2: "Hello/Hi, this is Name from [Team/Role]: message" or "I am Name from [Team]: message"
+  const m2 = normalized.match(
+    /^(?:hello\s+|hi\s+|hey\s+)?(?:this is|i am|i'm|it's)\s+([A-Za-z0-9_\-]{2,20})(?:\s+from\s+([A-Za-z0-9_\s\-]+?))?(?:\s+here)?\s*[:,\- ]\s*(.+)/is
+  );
   if (m2) {
-    const cand = m2[1].charAt(0).toUpperCase() + m2[1].slice(1);
-    let existing = allProfiles.find((p) => p.name.toLowerCase() === cand.toLowerCase());
-    if (!existing) {
-      existing = {
-        name: cand,
-        uid: Math.floor(1000 + Math.random() * 8999),
-        role: 'Incident Responder',
-        avatar: '👤',
-      };
+    const cand = m2[1].trim();
+    const role = m2[2] ? `${m2[2].trim()} Engineer` : 'Incident Responder';
+    if (!reservedWords.has(cand.toLowerCase())) {
+      return { text: m2[3].trim(), speaker: makeProfile(cand, role) };
     }
-    return { text: m2[2].trim(), speaker: existing };
   }
 
-  // Check for "Name here: message"
-  const m3 = rawText.match(/^([A-Za-z0-9_\-]{2,20})\s+here\s*[:,-]\s*(.+)/is);
+  // Pattern 3: Standalone intro "This is Name" / "Hi I'm Name" (switches speaker for upcoming talk)
+  const m3 = normalized.match(/^(?:hello\s+|hi\s+|hey\s+)?(?:this is|i am|i'm|it's)\s+([A-Za-z0-9_\-]{2,20})(?:\s+from\s+([A-Za-z0-9_\s\-]+?))?(?:\s+here)?[.!]?$/is);
   if (m3) {
-    const cand = m3[1].charAt(0).toUpperCase() + m3[1].slice(1);
-    let existing = allProfiles.find((p) => p.name.toLowerCase() === cand.toLowerCase());
-    if (!existing) {
-      existing = {
-        name: cand,
-        uid: Math.floor(1000 + Math.random() * 8999),
-        role: 'Incident Responder',
-        avatar: '👤',
-      };
+    const cand = m3[1].trim();
+    const role = m3[2] ? `${m3[2].trim()} Engineer` : 'Incident Responder';
+    if (!reservedWords.has(cand.toLowerCase())) {
+      const sp = makeProfile(cand, role);
+      return { text: `Joined incident call as ${sp.name}`, speaker: sp };
     }
-    return { text: m3[2].trim(), speaker: existing };
+  }
+
+  // Pattern 4: "Name here: message" or "Name speaking: message" or "Speaking is Name: message"
+  const m4 = normalized.match(/^([A-Za-z0-9_\-]{2,20})\s+(?:here|speaking|on the line)\s*[:,-]\s*(.+)/is);
+  if (m4) {
+    const cand = m4[1].trim();
+    if (!reservedWords.has(cand.toLowerCase())) {
+      return { text: m4[2].trim(), speaker: makeProfile(cand) };
+    }
+  }
+
+  // Pattern 5: "Speaking as Name: message"
+  const m5 = normalized.match(/^(?:speaking as|from)\s+([A-Za-z0-9_\-]{2,20})\s*[:,-]\s*(.+)/is);
+  if (m5) {
+    const cand = m5[1].trim();
+    if (!reservedWords.has(cand.toLowerCase())) {
+      return { text: m5[2].trim(), speaker: makeProfile(cand) };
+    }
   }
 
   return { text: rawText, speaker: currentSpeaker };

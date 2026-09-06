@@ -50,7 +50,14 @@ def agora_transcript_webhook(
     ):
         return {"status": "ignored", "reason": "echo_loop_agent_audio"}
     
-    # 2. Dynamic Speaker Identification (with default UID mapping fallback)
+    # 1. Phonetic Normalization for common browser speech-to-text mishearings
+    text = re.sub(r"\b(?:allies|a lies|ellis|elis)\b", "Alice", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:bop)\b", "Bob", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:carrel|carroll)\b", "Carol", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:serah|sara)\b", "Sarah", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:deve|dav)\b", "Dave", text, flags=re.IGNORECASE)
+
+    # 2. UID mapping fallback
     DEFAULT_SPEAKER_MAP = {
         "1001": "Alice",
         "1002": "Bob",
@@ -58,39 +65,43 @@ def agora_transcript_webhook(
         "1004": "Dave",
     }
     custom_map = payload.get("speaker_map") or {}
-    if not speaker_name or speaker_name.lower() in ["unknown", "user", "speaker"]:
+    if not speaker_name or speaker_name.lower() in ["unknown", "user", "speaker", ""]:
         if speaker_uid_str in custom_map:
             speaker_name = custom_map[speaker_uid_str]
         elif speaker_uid_str in DEFAULT_SPEAKER_MAP:
             speaker_name = DEFAULT_SPEAKER_MAP[speaker_uid_str]
-        elif speaker_uid:
+        elif speaker_uid and str(speaker_uid) not in ["0", "9990"]:
             speaker_name = f"Speaker {speaker_uid}"
         else:
             speaker_name = "Commander"
-    
-    # 1. Phonetic Normalization for common browser speech-to-text mishearings
-    text = re.sub(r"\b(?:allies|a lies|ellis|elis)\b", "Alice", text, flags=re.IGNORECASE)
-    text = re.sub(r"\b(?:bop)\b", "Bob", text, flags=re.IGNORECASE)
-    text = re.sub(r"\b(?:carrel|carroll)\b", "Carol", text, flags=re.IGNORECASE)
-    text = re.sub(r"\b(?:serah|sara)\b", "Sarah", text, flags=re.IGNORECASE)
 
-    # 2. Dynamic in-speech speaker extraction (e.g. "Bob: connection pool exhausted", "Hello I am Bob: ...", "Sarah here: ...")
-    m = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s*[:\-]\s*(.+)", text.strip(), re.DOTALL)
-    if m:
-        cand = m.group(1).title()
-        if cand.lower() not in ["note", "fact", "hypothesis", "action", "alert", "error", "warning", "info", "step", "signal", "question", "http", "https"]:
-            speaker_name = cand
-            text = m.group(2).strip()
+    reserved_words = {
+        "note", "fact", "hypothesis", "action", "alert", "error", "warning", "info",
+        "step", "signal", "question", "http", "https", "we", "they", "team", "service",
+        "database", "redis", "postgres", "server", "system", "latency", "pod", "cluster",
+        "status", "update", "incident", "issue", "problem", "fix", "task", "logs", "metrics"
+    }
+
+    # 3. Dynamic in-speech speaker extraction (overrides UID if name mentioned in utterance)
+    m1 = re.match(r"^([a-zA-Z0-9_\-]{2,20})\s*[:\-]\s*(.+)", text.strip(), re.DOTALL)
+    if m1 and m1.group(1).lower() not in reserved_words:
+        speaker_name = m1.group(1).strip().title()
+        text = m1.group(2).strip()
     else:
-        m2 = re.match(r"^(?:hello\s+|hi\s+|hey\s+)?(?:this is|i am|i'm)\s+([A-Z][a-zA-Z0-9_\-]{1,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,\- ]\s*(.+)", text.strip(), re.IGNORECASE | re.DOTALL)
-        if m2:
-            speaker_name = m2.group(1).title()
+        m2 = re.match(r"^(?:hello\s+|hi\s+|hey\s+)?(?:this is|i am|i'm|it's)\s+([a-zA-Z0-9_\-]{2,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,\- ]\s*(.+)", text.strip(), re.IGNORECASE | re.DOTALL)
+        if m2 and m2.group(1).lower() not in reserved_words:
+            speaker_name = m2.group(1).strip().title()
             text = m2.group(2).strip()
         else:
-            m3 = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s+here\s*[:,-]\s*(.+)", text.strip(), re.IGNORECASE | re.DOTALL)
-            if m3:
-                speaker_name = m3.group(1).title()
+            m3 = re.match(r"^([a-zA-Z0-9_\-]{2,20})\s+(?:here|speaking|on the line)\s*[:,-]\s*(.+)", text.strip(), re.IGNORECASE | re.DOTALL)
+            if m3 and m3.group(1).lower() not in reserved_words:
+                speaker_name = m3.group(1).strip().title()
                 text = m3.group(2).strip()
+            else:
+                m4 = re.match(r"^(?:speaking as|from)\s+([a-zA-Z0-9_\-]{2,20})\s*[:,-]\s*(.+)", text.strip(), re.IGNORECASE | re.DOTALL)
+                if m4 and m4.group(1).lower() not in reserved_words:
+                    speaker_name = m4.group(1).strip().title()
+                    text = m4.group(2).strip()
     
     # Dedup by event_id
     from ..models import Utterance

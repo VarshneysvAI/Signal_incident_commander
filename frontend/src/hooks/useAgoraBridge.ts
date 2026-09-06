@@ -37,10 +37,15 @@ export function useAgoraBridge(rawChannelName: string | null) {
     volumeLevel: 0,
   });
 
+  // Dynamic Google Meet responders list & active speaker
+  const [responders, setResponders] = useState<SpeakerProfile[]>([INITIAL_RESPONDER]);
+  const [activeSpeaker, setActiveSpeaker] = useState<SpeakerProfile>(INITIAL_RESPONDER);
+
   const [bridgeTranscripts, setBridgeTranscripts] = useState<
-    Array<{ id: string; speaker: string; text: string; time: string }>
+    Array<{ id: string; speaker: string; text: string; time: string; avatar?: string }>
   >([]);
   const [interimText, setInterimText] = useState('');
+  const [interimSpeaker, setInterimSpeaker] = useState<SpeakerProfile>(INITIAL_RESPONDER);
 
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const systemAudioTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -52,8 +57,21 @@ export function useAgoraBridge(rawChannelName: string | null) {
   const isListeningRef = useRef(false);
   const volumeIntervalRef = useRef<any>(null);
 
+  const respondersRef = useRef(responders);
+  const activeSpeakerRef = useRef(activeSpeaker);
+  respondersRef.current = responders;
+  activeSpeakerRef.current = activeSpeaker;
+
   const currentIncident = useAppStore((s) => s.currentIncident);
   const activeIncidentId = currentIncident?.id;
+
+  const addResponder = useCallback((profile: SpeakerProfile) => {
+    setResponders((prev) => {
+      const exists = prev.some((p) => p.name.toLowerCase() === profile.name.toLowerCase());
+      if (exists) return prev;
+      return [...prev, profile];
+    });
+  }, []);
 
   // Initialize Agora client
   useEffect(() => {
@@ -70,13 +88,13 @@ export function useAgoraBridge(rawChannelName: string | null) {
 
   // Send transcribed voice line to SIGNAL knowledge graph
   const sendBridgeTranscript = useCallback(
-    async (text: string, speakerName = 'Bridge Speaker') => {
+    async (text: string, speakerName = 'Commander', speakerUid = 1001, avatar?: string) => {
       if (!text.trim()) return;
       const eventId = `bridge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const time = new Date().toLocaleTimeString();
 
       setBridgeTranscripts((prev) => [
-        { id: eventId, speaker: speakerName, text, time },
+        { id: eventId, speaker: speakerName, text, time, avatar },
         ...prev.slice(0, 24),
       ]);
 
@@ -85,7 +103,7 @@ export function useAgoraBridge(rawChannelName: string | null) {
           event_id: eventId,
           channel_name: cleanChannelName,
           incident_id: activeIncidentId,
-          speaker_uid: 9990,
+          speaker_uid: speakerUid,
           speaker_name: speakerName,
           text: text,
           timestamp: new Date().toISOString(),
@@ -97,7 +115,7 @@ export function useAgoraBridge(rawChannelName: string | null) {
     [cleanChannelName, activeIncidentId]
   );
 
-  // Initialize Web Speech Recognition for the bridge
+  // Initialize Web Speech Recognition for the bridge with dynamic speaker switching
   const startBridgeSpeechRecognition = useCallback(() => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -125,8 +143,20 @@ export function useAgoraBridge(rawChannelName: string | null) {
             if (event.results[i].isFinal) {
               const finalTrimmed = transcript.trim();
               if (finalTrimmed.length > 2) {
-                const parsed = parseInSpeechSpeaker(finalTrimmed, INITIAL_RESPONDER, [INITIAL_RESPONDER]);
-                sendBridgeTranscript(parsed.text, parsed.speaker.name);
+                const parsed = parseInSpeechSpeaker(
+                  finalTrimmed,
+                  activeSpeakerRef.current,
+                  respondersRef.current
+                );
+                // Dynamically add responder and update active speaker context
+                addResponder(parsed.speaker);
+                setActiveSpeaker(parsed.speaker);
+                sendBridgeTranscript(
+                  parsed.text,
+                  parsed.speaker.name,
+                  parsed.speaker.uid,
+                  parsed.speaker.avatar
+                );
               }
               setInterimText('');
             } else {
@@ -134,7 +164,13 @@ export function useAgoraBridge(rawChannelName: string | null) {
             }
           }
           if (interim) {
-            setInterimText(interim);
+            const parsed = parseInSpeechSpeaker(
+              interim,
+              activeSpeakerRef.current,
+              respondersRef.current
+            );
+            setInterimSpeaker(parsed.speaker);
+            setInterimText(parsed.text || interim);
           }
         };
 
@@ -507,8 +543,13 @@ export function useAgoraBridge(rawChannelName: string | null) {
   return {
     state,
     cleanChannelName,
+    responders,
+    activeSpeaker,
+    setActiveSpeaker,
+    addResponder,
     bridgeTranscripts,
     interimText,
+    interimSpeaker,
     startSystemCapture,
     enablePresenterMic,
     joinAndPublish,
@@ -518,4 +559,5 @@ export function useAgoraBridge(rawChannelName: string | null) {
     stopBridge,
   };
 }
+
 

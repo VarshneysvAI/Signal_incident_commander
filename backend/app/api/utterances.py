@@ -23,25 +23,42 @@ def create_utterance(
     
     import re
     raw_text = utterance.text.strip()
-    speaker_name = utterance.speaker_name or "Unknown"
+    speaker_name = utterance.speaker_name or "Commander"
 
-    # Dynamic in-speech speaker extraction (e.g. "Bob: connection pool exhausted" or "Sarah here: 504 timeouts")
-    m = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s*[:\-]\s*(.+)", raw_text, re.DOTALL)
-    if m:
-        cand = m.group(1).title()
-        if cand.lower() not in ["note", "fact", "hypothesis", "action", "alert", "error", "warning", "info", "step", "signal", "question", "http", "https"]:
-            speaker_name = cand
-            raw_text = m.group(2).strip()
+    # 1. Phonetic Normalization for common browser speech-to-text mishearings
+    raw_text = re.sub(r"\b(?:allies|a lies|ellis|elis)\b", "Alice", raw_text, flags=re.IGNORECASE)
+    raw_text = re.sub(r"\b(?:bop)\b", "Bob", raw_text, flags=re.IGNORECASE)
+    raw_text = re.sub(r"\b(?:carrel|carroll)\b", "Carol", raw_text, flags=re.IGNORECASE)
+    raw_text = re.sub(r"\b(?:serah|sara)\b", "Sarah", raw_text, flags=re.IGNORECASE)
+    raw_text = re.sub(r"\b(?:deve|dav)\b", "Dave", raw_text, flags=re.IGNORECASE)
+
+    reserved_words = {
+        "note", "fact", "hypothesis", "action", "alert", "error", "warning", "info",
+        "step", "signal", "question", "http", "https", "we", "they", "team", "service",
+        "database", "redis", "postgres", "server", "system", "latency", "pod", "cluster",
+        "status", "update", "incident", "issue", "problem", "fix", "task", "logs", "metrics"
+    }
+
+    # 2. Dynamic in-speech speaker extraction
+    m1 = re.match(r"^([a-zA-Z0-9_\-]{2,20})\s*[:\-]\s*(.+)", raw_text, re.DOTALL)
+    if m1 and m1.group(1).lower() not in reserved_words:
+        speaker_name = m1.group(1).strip().title()
+        raw_text = m1.group(2).strip()
     else:
-        m2 = re.match(r"^(?:this is|i am)\s+([A-Z][a-zA-Z0-9_\-]{1,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,-]\s*(.+)", raw_text, re.IGNORECASE | re.DOTALL)
-        if m2:
-            speaker_name = m2.group(1).title()
+        m2 = re.match(r"^(?:hello\s+|hi\s+|hey\s+)?(?:this is|i am|i'm|it's)\s+([a-zA-Z0-9_\-]{2,20})(?:\s+from\s+[\w\s]+)?(?:\s+here)?\s*[:,\- ]\s*(.+)", raw_text, re.IGNORECASE | re.DOTALL)
+        if m2 and m2.group(1).lower() not in reserved_words:
+            speaker_name = m2.group(1).strip().title()
             raw_text = m2.group(2).strip()
         else:
-            m3 = re.match(r"^([A-Z][a-zA-Z0-9_\-]{1,20})\s+here\s*[:,-]\s*(.+)", raw_text, re.IGNORECASE | re.DOTALL)
-            if m3:
-                speaker_name = m3.group(1).title()
+            m3 = re.match(r"^([a-zA-Z0-9_\-]{2,20})\s+(?:here|speaking|on the line)\s*[:,-]\s*(.+)", raw_text, re.IGNORECASE | re.DOTALL)
+            if m3 and m3.group(1).lower() not in reserved_words:
+                speaker_name = m3.group(1).strip().title()
                 raw_text = m3.group(2).strip()
+            else:
+                m4 = re.match(r"^(?:speaking as|from)\s+([a-zA-Z0-9_\-]{2,20})\s*[:,-]\s*(.+)", raw_text, re.IGNORECASE | re.DOTALL)
+                if m4 and m4.group(1).lower() not in reserved_words:
+                    speaker_name = m4.group(1).strip().title()
+                    raw_text = m4.group(2).strip()
 
     # Check for wake word: "Signal, ..." or "Hey Signal, ..."
     wake_match = re.match(r"^(?:hey\s+)?signal[,:]?\s*(.*)", raw_text, re.IGNORECASE)
