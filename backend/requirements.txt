@@ -9,3 +9,4 @@ pytest-asyncio>=0.23.0
 python-dotenv>=1.0.0
 aiosqlite>=0.20.0
 flake8>=7.0.0
+python-multipart>=0.0.9
