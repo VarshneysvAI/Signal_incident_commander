@@ -59,11 +59,13 @@ export function useAgoraBridge(channelName: string | null) {
 
       const audioTrack = stream.getAudioTracks()[0];
       if (!audioTrack) {
-        throw new Error('No audio track found in system capture');
+        // Stop any video tracks that were started
+        stream.getVideoTracks().forEach(track => track.stop());
+        throw new Error('Tab Audio was not checked. In the Chrome popup, choose the "Chrome Tab" tab and make sure the "Share tab audio" checkbox is checked at the bottom left.');
       }
 
       systemAudioTrackRef.current = audioTrack;
-      setState(prev => ({ ...prev, isCapturing: true }));
+      setState(prev => ({ ...prev, isCapturing: true, error: null }));
 
       // Stop video track immediately (we only need audio)
       stream.getVideoTracks().forEach(track => track.stop());
@@ -73,7 +75,9 @@ export function useAgoraBridge(channelName: string | null) {
       console.error('System audio capture failed:', err);
       setState(prev => ({ 
         ...prev, 
-        error: `System audio capture failed: ${err.message}. Use fallback mode.`,
+        error: err.message.includes('Tab Audio was not checked')
+          ? err.message
+          : `Audio capture failed: ${err.message}. Make sure to select "Chrome Tab" with "Share tab audio" checked.`,
         isCapturing: false 
       }));
       throw err;

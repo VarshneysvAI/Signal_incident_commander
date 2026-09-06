@@ -160,8 +160,20 @@ export const BridgePage: React.FC<BridgePageProps> = ({ channelName }) => {
 
         {/* Controls */}
         <div className="bg-slate-800 rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">🎛️ Controls</h2>
+          <h2 className="text-xl font-semibold mb-3">🎛️ Controls</h2>
           
+          <div className="mb-4 p-3.5 bg-blue-950/40 border border-blue-500/50 rounded-xl text-xs text-blue-200 flex items-start gap-2.5">
+            <span className="text-base">💡</span>
+            <div>
+              <p className="font-semibold text-white">How to Capture Google Meet / Zoom Audio:</p>
+              <ol className="list-decimal list-inside space-y-1 mt-1 text-slate-300">
+                <li>Click <strong>"Start System Audio Capture"</strong> below.</li>
+                <li>In the Chrome dialog, select the <strong>"Chrome Tab"</strong> tab (where your Google Meet is running).</li>
+                <li>⚠️ Make sure the <strong className="text-emerald-300">"Share tab audio"</strong> checkbox at the bottom-left is <strong>CHECKED</strong>.</li>
+              </ol>
+            </div>
+          </div>
+
           <div className="space-y-4">
             <button
               onClick={handleStartCapture}
