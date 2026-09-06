@@ -207,6 +207,163 @@ export function useAgoraBridge(rawChannelName: string | null) {
     setInterimText('');
   };
 
+  const tabMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const tabAudioIntervalRef = useRef<any>(null);
+  const isTranscribingTabRef = useRef(false);
+
+  // Send captured Google Meet tab audio chunk to backend Whisper/ASR
+  const processTabAudioBlob = useCallback(
+    async (audioBlob: Blob) => {
+      if (audioBlob.size < 1200 || isTranscribingTabRef.current) return;
+      isTranscribingTabRef.current = true;
+
+      try {
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'meet_audio.webm');
+        formData.append('channel_name', cleanChannelName);
+        if (activeIncidentId) {
+          formData.append('incident_id', activeIncidentId);
+        }
+        formData.append('speaker_name', activeSpeakerRef.current.name);
+        formData.append('speaker_uid', String(activeSpeakerRef.current.uid));
+
+        const res = await apiClient.post('/api/agora/transcribe-audio', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        if (res.data?.status === 'ok' && res.data?.text) {
+          const transcribedText = res.data.text.trim();
+          const detectedSpeaker = res.data.speaker || activeSpeakerRef.current.name;
+
+          // Parse speaker identity and auto-induct
+          const parsed = parseInSpeechSpeaker(
+            transcribedText,
+            { ...activeSpeakerRef.current, name: detectedSpeaker },
+            respondersRef.current
+          );
+
+          addResponder(parsed.speaker);
+          setActiveSpeaker(parsed.speaker);
+
+          const eventId = `meet-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const timeStr = new Date().toLocaleTimeString();
+
+          setBridgeTranscripts((prev) => [
+            {
+              id: eventId,
+              speaker: parsed.speaker.name,
+              text: parsed.text,
+              time: timeStr,
+              avatar: parsed.speaker.avatar,
+            },
+            ...prev.slice(0, 24),
+          ]);
+        }
+      } catch (err) {
+        console.warn('Tab audio chunk transcription note:', err);
+      } finally {
+        isTranscribingTabRef.current = false;
+      }
+    },
+    [cleanChannelName, activeIncidentId, addResponder]
+  );
+
+  // Start continuous tab audio streamer with voice activity detection (VAD)
+  const startTabAudioStreamer = useCallback(
+    (audioTrack: MediaStreamTrack) => {
+      try {
+        const mediaStream = new MediaStream([audioTrack]);
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        const source = audioCtx.createMediaStreamSource(mediaStream);
+        source.connect(analyser);
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        // Setup MediaRecorder
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+          ? 'audio/ogg;codecs=opus'
+          : 'audio/webm';
+
+        let recorder = new MediaRecorder(mediaStream, { mimeType });
+        let recordedChunks: Blob[] = [];
+
+        recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          if (recordedChunks.length > 0) {
+            const blob = new Blob(recordedChunks, { type: mimeType });
+            recordedChunks = [];
+            processTabAudioBlob(blob);
+          }
+        };
+
+        tabMediaRecorderRef.current = recorder;
+
+        // VAD Loop: Check if Google Meet participants are speaking
+        let speechActive = false;
+        let silenceCount = 0;
+        let speechStartTime = 0;
+
+        tabAudioIntervalRef.current = setInterval(() => {
+          if (!systemAudioTrackRef.current || systemAudioTrackRef.current.readyState !== 'live') return;
+
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i];
+          }
+          const avgLevel = sum / bufferLength;
+
+          // If volume detected from Google Meet participants
+          if (avgLevel > 4) {
+            silenceCount = 0;
+            if (!speechActive) {
+              speechActive = true;
+              speechStartTime = Date.now();
+              if (recorder.state === 'inactive') {
+                try {
+                  recorder.start();
+                } catch (e) {}
+              }
+            } else if (Date.now() - speechStartTime > 4000) {
+              // Max chunk length 4 seconds: cycle recorder to transcribe
+              if (recorder.state === 'recording') {
+                try {
+                  recorder.stop();
+                  recorder.start();
+                } catch (e) {}
+              }
+              speechStartTime = Date.now();
+            }
+          } else if (speechActive) {
+            silenceCount++;
+            // If silence for ~800ms after speaking, commit chunk
+            if (silenceCount > 4) {
+              speechActive = false;
+              if (recorder.state === 'recording') {
+                try {
+                  recorder.stop();
+                } catch (e) {}
+              }
+            }
+          }
+        }, 150);
+      } catch (streamErr) {
+        console.warn('Tab audio streamer setup error:', streamErr);
+      }
+    },
+    [processTabAudioBlob]
+  );
+
   // Start capturing system audio (Google Meet/Zoom audio via Chrome tab sharing)
   const startSystemCapture = async () => {
     try {
@@ -232,7 +389,16 @@ export function useAgoraBridge(rawChannelName: string | null) {
       // Handle user stopping screen share via Chrome floating UI
       audioTrack.onended = () => {
         systemAudioTrackRef.current = null;
-        setState((prev) => ({ ...prev, isCapturing: false, status: 'System audio capture stopped' }));
+        if (tabAudioIntervalRef.current) {
+          clearInterval(tabAudioIntervalRef.current);
+          tabAudioIntervalRef.current = null;
+        }
+        if (tabMediaRecorderRef.current && tabMediaRecorderRef.current.state === 'recording') {
+          try {
+            tabMediaRecorderRef.current.stop();
+          } catch (e) {}
+        }
+        setState((prev) => ({ ...prev, isCapturing: false, status: 'Google Meet audio capture stopped' }));
       };
 
       systemAudioTrackRef.current = audioTrack;
@@ -240,14 +406,17 @@ export function useAgoraBridge(rawChannelName: string | null) {
         ...prev,
         isCapturing: true,
         error: null,
-        status: 'Google Meet tab audio captured successfully',
+        status: 'Google Meet tab audio captured & streaming to graph',
       }));
 
       // Stop video track immediately (we only need the audio)
       stream.getVideoTracks().forEach((track) => track.stop());
 
-      // Start speech recognition so spoken tab/mic audio is transcribed
+      // Start speech recognition for presenter mic
       startBridgeSpeechRecognition();
+
+      // Start real-time tab audio streamer for teammate voices
+      startTabAudioStreamer(audioTrack);
 
       return audioTrack;
     } catch (err: any) {
@@ -492,6 +661,18 @@ export function useAgoraBridge(rawChannelName: string | null) {
   // Stop bridge
   const stopBridge = () => {
     stopBridgeSpeechRecognition();
+
+    if (tabAudioIntervalRef.current) {
+      clearInterval(tabAudioIntervalRef.current);
+      tabAudioIntervalRef.current = null;
+    }
+
+    if (tabMediaRecorderRef.current && tabMediaRecorderRef.current.state === 'recording') {
+      try {
+        tabMediaRecorderRef.current.stop();
+      } catch (e) {}
+      tabMediaRecorderRef.current = null;
+    }
 
     if (volumeIntervalRef.current) {
       clearInterval(volumeIntervalRef.current);
