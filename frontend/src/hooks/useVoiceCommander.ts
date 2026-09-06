@@ -312,6 +312,195 @@ export function useVoiceCommander(incidentId: string | null) {
     setStatusText(`Active · Listening as ${selectedSpeaker.name}`);
   };
 
+  // Google Meet Tab Audio Bridge inside VoiceCommander
+  const [isMeetBridged, setIsMeetBridged] = useState(false);
+  const [meetVolumeLevel, setMeetVolumeLevel] = useState(0);
+  const tabAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const tabMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const tabAudioIntervalRef = useRef<any>(null);
+  const isTranscribingMeetRef = useRef(false);
+
+  const processMeetBlob = useCallback(
+    async (blob: Blob) => {
+      if (blob.size < 1200 || isTranscribingMeetRef.current || !incidentIdRef.current) return;
+      isTranscribingMeetRef.current = true;
+
+      try {
+        const formData = new FormData();
+        formData.append('file', blob, 'meet_audio.webm');
+        formData.append('incident_id', incidentIdRef.current);
+        formData.append('speaker_name', selectedSpeakerRef.current.name);
+
+        const res = await apiClient.post('/api/agora/transcribe-audio', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        if (res.data?.status === 'ok' && res.data?.text) {
+          const text = res.data.text.trim();
+          const speaker = res.data.speaker || selectedSpeakerRef.current.name;
+
+          const parsed = parseInSpeechSpeaker(
+            text,
+            { ...selectedSpeakerRef.current, name: speaker },
+            respondersRef.current
+          );
+
+          addResponder(parsed.speaker);
+          dispatchUtterance(parsed.text, parsed.speaker.name);
+        }
+      } catch (err) {
+        console.warn('Meet tab chunk transcription notice:', err);
+      } finally {
+        isTranscribingMeetRef.current = false;
+      }
+    },
+    [addResponder, dispatchUtterance]
+  );
+
+  const startMeetBridge = async () => {
+    if (!incidentId) {
+      alert('Please select or create an incident first.');
+      return;
+    }
+
+    try {
+      setStatusText('Requesting Google Meet tab audio...');
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        } as any,
+      });
+
+      const audioTrack = stream.getAudioTracks()[0];
+      if (!audioTrack) {
+        stream.getVideoTracks().forEach((t) => t.stop());
+        alert('Make sure to select "Chrome Tab" (your Google Meet) and check "Share tab audio" at the bottom left.');
+        return;
+      }
+
+      // Stop video track immediately
+      stream.getVideoTracks().forEach((t) => t.stop());
+
+      tabAudioTrackRef.current = audioTrack;
+      setIsMeetBridged(true);
+      setStatusText('Google Meet Tab Audio Bridge Active');
+
+      audioTrack.onended = () => {
+        stopMeetBridge();
+      };
+
+      // Setup VAD and MediaRecorder
+      const mediaStream = new MediaStream([audioTrack]);
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      const source = audioCtx.createMediaStreamSource(mediaStream);
+      source.connect(analyser);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+
+      const recorder = new MediaRecorder(mediaStream, { mimeType });
+      let recordedChunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordedChunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        if (recordedChunks.length > 0) {
+          const blob = new Blob(recordedChunks, { type: mimeType });
+          recordedChunks = [];
+          processMeetBlob(blob);
+        }
+      };
+
+      tabMediaRecorderRef.current = recorder;
+
+      let speechActive = false;
+      let silenceCount = 0;
+      let speechStartTime = 0;
+
+      tabAudioIntervalRef.current = setInterval(() => {
+        if (!tabAudioTrackRef.current || tabAudioTrackRef.current.readyState !== 'live') return;
+
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / bufferLength;
+        setMeetVolumeLevel(Math.min(100, Math.round(avg * 3)));
+
+        if (avg > 4) {
+          silenceCount = 0;
+          if (!speechActive) {
+            speechActive = true;
+            speechStartTime = Date.now();
+            if (recorder.state === 'inactive') {
+              try {
+                recorder.start();
+              } catch (e) {}
+            }
+          } else if (Date.now() - speechStartTime > 4000) {
+            if (recorder.state === 'recording') {
+              try {
+                recorder.stop();
+                recorder.start();
+              } catch (e) {}
+            }
+            speechStartTime = Date.now();
+          }
+        } else if (speechActive) {
+          silenceCount++;
+          if (silenceCount > 4) {
+            speechActive = false;
+            if (recorder.state === 'recording') {
+              try {
+                recorder.stop();
+              } catch (e) {}
+            }
+          }
+        }
+      }, 150);
+    } catch (err: any) {
+      console.error('Failed to start meet bridge:', err);
+      setStatusText(`Meet bridge error: ${err.message || 'Permission denied'}`);
+    }
+  };
+
+  const stopMeetBridge = () => {
+    if (tabAudioIntervalRef.current) {
+      clearInterval(tabAudioIntervalRef.current);
+      tabAudioIntervalRef.current = null;
+    }
+
+    if (tabMediaRecorderRef.current && tabMediaRecorderRef.current.state === 'recording') {
+      try {
+        tabMediaRecorderRef.current.stop();
+      } catch (e) {}
+      tabMediaRecorderRef.current = null;
+    }
+
+    if (tabAudioTrackRef.current) {
+      tabAudioTrackRef.current.stop();
+      tabAudioTrackRef.current = null;
+    }
+
+    setIsMeetBridged(false);
+    setMeetVolumeLevel(0);
+    setStatusText('Google Meet bridge disconnected');
+  };
+
   // Stop / Mute Voice
   const stopVoice = () => {
     setIsListening(false);
@@ -351,6 +540,7 @@ export function useVoiceCommander(incidentId: string | null) {
   useEffect(() => {
     return () => {
       stopVoice();
+      stopMeetBridge();
     };
   }, []);
 
@@ -358,6 +548,8 @@ export function useVoiceCommander(incidentId: string | null) {
     responders,
     addResponder,
     isListening,
+    isMeetBridged,
+    meetVolumeLevel,
     interimTranscript,
     recentSpoken,
     selectedSpeaker,
@@ -368,6 +560,9 @@ export function useVoiceCommander(incidentId: string | null) {
     statusText,
     startVoice,
     stopVoice,
+    startMeetBridge,
+    stopMeetBridge,
     dispatchUtterance,
   };
 }
+

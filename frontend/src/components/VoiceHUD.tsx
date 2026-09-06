@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useVoiceCommander, SpeakerProfile } from '../hooks/useVoiceCommander';
 import { useAppStore } from '../store';
 import { ChaosEngineModal } from './ChaosEngineModal';
@@ -21,6 +21,8 @@ export function VoiceHUD({ voiceCommander }: VoiceHUDProps) {
     responders,
     addResponder,
     isListening,
+    isMeetBridged,
+    meetVolumeLevel,
     interimTranscript,
     selectedSpeaker,
     setSelectedSpeaker,
@@ -30,6 +32,8 @@ export function VoiceHUD({ voiceCommander }: VoiceHUDProps) {
     statusText,
     startVoice,
     stopVoice,
+    startMeetBridge,
+    stopMeetBridge,
     dispatchUtterance,
   } = voiceCommander;
 
@@ -55,31 +59,45 @@ export function VoiceHUD({ voiceCommander }: VoiceHUDProps) {
   };
 
   return (
-    <div className="bg-slate-900 border-b border-slate-700/80 px-6 py-2.5 shadow-md">
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* Left Side: Voice Connect Button & Persona Switcher */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Main Voice Toggle Button */}
+    <div className="bg-slate-900 border-b border-slate-700/80 px-4 py-2 shadow-md">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
+        {/* Left Side: Voice & Google Meet Controls + Persona Switcher */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Main Presenter Mic Toggle */}
           <button
             onClick={isListening ? stopVoice : startVoice}
-            className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all shadow-md ${
+            className={`px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-md ${
               isListening
                 ? 'bg-red-600 hover:bg-red-700 text-white ring-2 ring-red-400/50 animate-pulse'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white hover:scale-105'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
             }`}
           >
             <span className="text-sm">{isListening ? '🔴' : '🎙️'}</span>
-            <span>{isListening ? 'Stop / Mute Voice' : 'Start Live Voice (Mic)'}</span>
+            <span>{isListening ? 'Mute Mic' : 'Start Mic'}</span>
+          </button>
+
+          {/* Google Meet / Zoom Tab Audio Bridge Toggle */}
+          <button
+            onClick={isMeetBridged ? stopMeetBridge : startMeetBridge}
+            className={`px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-md ${
+              isMeetBridged
+                ? 'bg-purple-600 hover:bg-purple-700 text-white ring-2 ring-purple-400/50 animate-pulse'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+            }`}
+            title="Stream audio from Google Meet/Zoom tab directly into the incident graph"
+          >
+            <span className="text-sm">🌉</span>
+            <span>{isMeetBridged ? 'Disconnect Meet' : 'Bridge Google Meet'}</span>
           </button>
 
           {/* Active Persona Switcher */}
-          <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700 overflow-x-auto max-w-xl">
-            <span className="text-[10px] text-slate-400 font-semibold px-1.5 whitespace-nowrap">Speaking as:</span>
+          <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700 overflow-x-auto max-w-md">
+            <span className="text-[10px] text-slate-400 font-semibold px-1 whitespace-nowrap">Speaker:</span>
             {responders.map((profile: SpeakerProfile) => (
               <button
                 key={profile.name}
                 onClick={() => setSelectedSpeaker(profile)}
-                className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${
+                className={`px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${
                   selectedSpeaker.name === profile.name
                     ? 'bg-blue-600 text-white shadow-sm font-semibold'
                     : 'text-slate-300 hover:text-white hover:bg-slate-700'
@@ -94,21 +112,33 @@ export function VoiceHUD({ voiceCommander }: VoiceHUDProps) {
             {/* Add Custom Responder Button */}
             <button
               onClick={() => setShowAddModal(true)}
-              className="px-2 py-1 rounded text-xs text-blue-400 hover:text-white hover:bg-slate-700 font-bold transition-colors"
-              title="Add any custom engineer or responder persona"
+              className="px-1.5 py-0.5 rounded text-xs text-blue-400 hover:text-white hover:bg-slate-700 font-bold transition-colors"
+              title="Add any custom engineer persona"
             >
-              + Add
+              +
             </button>
           </div>
 
-          {/* Live Mic Volume Level Meter */}
+          {/* Live Audio Level Meters */}
           {isListening && (
-            <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-mono">Mic</span>
-              <div className="w-14 h-2 bg-slate-700 rounded-full overflow-hidden">
+            <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700" title="Presenter Microphone Level">
+              <span className="text-[9px] text-emerald-400 uppercase tracking-wider font-mono">Mic</span>
+              <div className="w-10 h-1.5 bg-slate-700 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-emerald-400 transition-all duration-75"
                   style={{ width: `${Math.max(8, volumeLevel)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {isMeetBridged && (
+            <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700" title="Google Meet Teammates Audio Level">
+              <span className="text-[9px] text-purple-400 uppercase tracking-wider font-mono">Meet</span>
+              <div className="w-10 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-purple-400 transition-all duration-75"
+                  style={{ width: `${Math.max(8, meetVolumeLevel)}%` }}
                 />
               </div>
             </div>
