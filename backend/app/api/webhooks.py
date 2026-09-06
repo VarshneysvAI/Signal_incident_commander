@@ -50,15 +50,23 @@ def agora_transcript_webhook(
     ):
         return {"status": "ignored", "reason": "echo_loop_agent_audio"}
     
-    # 2. Dynamic Speaker Identification (No static hardcoded names)
+    # 2. Dynamic Speaker Identification (with default UID mapping fallback)
+    DEFAULT_SPEAKER_MAP = {
+        "1001": "Alice",
+        "1002": "Bob",
+        "1003": "Carol",
+        "1004": "Dave",
+    }
     custom_map = payload.get("speaker_map") or {}
     if not speaker_name or speaker_name.lower() in ["unknown", "user", "speaker"]:
         if speaker_uid_str in custom_map:
             speaker_name = custom_map[speaker_uid_str]
+        elif speaker_uid_str in DEFAULT_SPEAKER_MAP:
+            speaker_name = DEFAULT_SPEAKER_MAP[speaker_uid_str]
         elif speaker_uid:
             speaker_name = f"Speaker {speaker_uid}"
         else:
-            speaker_name = "Speaker 1"
+            speaker_name = "Commander"
     
     # 1. Phonetic Normalization for common browser speech-to-text mishearings
     text = re.sub(r"\b(?:allies|a lies|ellis|elis)\b", "Alice", text, flags=re.IGNORECASE)

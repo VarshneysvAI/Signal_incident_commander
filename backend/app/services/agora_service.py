@@ -14,8 +14,8 @@ class AgoraService:
     """Service for Agora voice integration."""
     
     def __init__(self):
-        self.app_id = settings.agora_app_id
-        self.app_certificate = settings.agora_app_certificate
+        self.app_id = settings.agora_app_id.strip('"\' ') if settings.agora_app_id else None
+        self.app_certificate = settings.agora_app_certificate.strip('"\' ') if settings.agora_app_certificate else None
         self.enabled = bool(self.app_id and self.app_certificate)
     
     def generate_token(
