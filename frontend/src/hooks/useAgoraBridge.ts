@@ -105,15 +105,16 @@ export function useAgoraBridge(channelName: string | null) {
   };
 
   // Join channel and publish audio tracks
-  const joinAndPublish = async (token: string, uid: string) => {
+  const joinAndPublish = async (token: string, uid: string, appId?: string) => {
     if (!clientRef.current || !channelName) {
       throw new Error('Client not initialized');
     }
 
+    const effectiveAppId = (appId || '448514fe68b2427097e014f12cb5d64e').trim();
     const client = clientRef.current;
 
-    // Join channel
-    await client.join('', channelName, token, uid);
+    // Join channel with valid App ID
+    await client.join(effectiveAppId, channelName, token, uid);
 
     // Create local audio tracks
     const tracks: LocalAudioTrack[] = [];
@@ -132,9 +133,25 @@ export function useAgoraBridge(channelName: string | null) {
       tracks.push(micTrack);
     }
 
+    // If no custom tracks were started, create standard microphone track
+    if (tracks.length === 0) {
+      try {
+        const defaultMicTrack = await AgoraRTC.createMicrophoneAudioTrack({
+          encoderConfig: 'high_quality_stereo',
+          AEC: true,
+          ANS: true,
+        });
+        tracks.push(defaultMicTrack);
+      } catch (e) {
+        console.warn('Could not initialize fallback microphone track:', e);
+      }
+    }
+
     // Publish tracks
     if (tracks.length > 0) {
       await client.publish(tracks);
+      setState(prev => ({ ...prev, isPublishing: true, error: null }));
+    } else {
       setState(prev => ({ ...prev, isPublishing: true }));
     }
 

@@ -26,6 +26,8 @@ export const BridgePage: React.FC<BridgePageProps> = ({ channelName }) => {
     stopBridge,
   } = useAgoraBridge(channelName);
 
+  const [appId, setAppId] = useState<string>('448514fe68b2427097e014f12cb5d64e');
+
   // Fetch Agora token on mount
   useEffect(() => {
     const fetchToken = async () => {
@@ -35,6 +37,9 @@ export const BridgePage: React.FC<BridgePageProps> = ({ channelName }) => {
           uid: 'bridge',
         });
         setToken(response.data.token);
+        if (response.data.app_id) {
+          setAppId(response.data.app_id);
+        }
       } catch (err: any) {
         console.error('Failed to fetch Agora token:', err);
       }
@@ -73,7 +78,6 @@ export const BridgePage: React.FC<BridgePageProps> = ({ channelName }) => {
       console.log('System audio capture started');
     } catch (err: any) {
       console.error('Capture failed:', err);
-      alert(`Failed to capture system audio: ${err.message}\n\nTry using a virtual loopback device instead.`);
     }
   };
 
@@ -90,12 +94,12 @@ export const BridgePage: React.FC<BridgePageProps> = ({ channelName }) => {
   // Handle join and publish
   const handleJoin = async () => {
     if (!token) {
-      alert('Token not loaded yet');
+      alert('Agora Token not loaded yet. Please ensure the backend is connected.');
       return;
     }
 
     try {
-      await joinAndPublish(token, 'bridge');
+      await joinAndPublish(token, 'bridge', appId);
       console.log('Joined channel and publishing');
     } catch (err: any) {
       console.error('Join failed:', err);
